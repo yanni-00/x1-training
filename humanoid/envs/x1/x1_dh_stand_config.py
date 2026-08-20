@@ -304,12 +304,14 @@ class X1DHStandCfg(LeggedRobotCfg):
                            "stand": [2,3],
                            "walk_omnidirectional": [4,6]}
 
-        heading_command = False  # v1+symmetry: 关闭 heading 跟踪，yaw 稳定改由 joint_symmetry reward 承担（v7 sim 验证 heading=False 下 symmetry 可稳 yaw）
+        heading_command = False  # 关闭 heading 跟踪：真机 yaw 依赖 IMU 积分有漂移，heading 环持续纠偏与 policy 能力失配；ang_vel_yaw 直接采样 [-0.6,0.6]，保留多命令鲁棒，偏航改由 reward 对称性约束治理
         stand_com_threshold = 0.05 # if (lin_vel_x, lin_vel_y, ang_vel_yaw).norm < this, robot should stand
         sw_switch = True # use stand_com_threshold or not
 
         class ranges:
-            lin_vel_x = [-0.4, 1.2] # min max [m/s] 
+            # 小步线：收窄到低速域。固定 4Hz 节拍下步长=vx/4：cmd 1.2→30cm 与 0.02 抬脚运动学不可行（v6 cmd 0.5 已碎步 17cm）；
+            # [0.1,0.5] → 步长 2.5-12.5cm，且保留小幅域随机化
+            lin_vel_x = [0.1, 0.5] # min max [m/s]
             lin_vel_y = [-0.4, 0.4]   # min max [m/s]
             ang_vel_yaw = [-0.6, 0.6]    # min max [rad/s]
             heading = [-3.14, 3.14]
@@ -324,10 +326,14 @@ class X1DHStandCfg(LeggedRobotCfg):
 
         # final_swing_joint_pos = final_swing_joint_delta_pos + default_pos
         final_swing_joint_delta_pos = [0.25, 0.05, -0.11, 0.35, -0.16, 0.0, -0.25, -0.05, 0.11, 0.35, -0.16, 0.0]
-        target_feet_height = 0.03 
-        target_feet_height_max = 0.06
+        # 低抬小步：抬脚 0.03→0.02（下界 0.02，真机踝偏置裕度），max 保持 2 倍比例 0.06→0.04
+        # 依据：ank 线 v0 小步搓 sim2real 极像（mean 差 <2.5°）vs v1 大步剧烈；μ 扫描证明打滑由步态力学主导
+        target_feet_height = 0.02
+        target_feet_height_max = 0.04
         feet_to_ankle_distance = 0.041
-        cycle_time = 0.7
+        # 小步线：节拍本身就是快拍。0.7→0.5 → 接触切换 4Hz（受控碎步替代 v6/v7 逃逸碎步）；
+        # cmd 0.25 → 步长 ≈6cm 由节拍涌现，不再要求 policy 压步幅
+        cycle_time = 0.5
         # if true negative total rewards are clipped at zero (avoids early termination problems)
         only_positive_rewards = True
         # tracking reward = exp(-error*sigma)
@@ -339,12 +345,14 @@ class X1DHStandCfg(LeggedRobotCfg):
             feet_clearance = 1.
             feet_contact_number = 2.0
             # gait
+            # 恢复 reward_v1 值 1.2（v7 归零教训：删正激励不治碎步，腾空反升 17.9→21.8%）；
+            # cycle 0.5 下单步 swing ≈0.25s，clamp 0.5s 天然弱化，节拍主导权仍在 contact_number
             feet_air_time = 1.2
+            # 恢复 reward_v1 值 -1.0（env 内已同步线性化 + 40N 判据）
             foot_slip = -1.0
             feet_distance = 0.2
             knee_distance = 0.2
-            # 左右镜像对称（hip_roll/hip_yaw/ankle_roll 非镜像分量）：治真机 yaw 漂 +13.9°/s
-            # （v7 sim 验证：heading=False 下 yaw -2.75→0.61°/s、hp_err 同步降；v3b 真机缺此约束致偏航）
+            # 左右镜像对称（hip_roll/hip_yaw/ankle_roll 非镜像分量）：治关 heading 后的持续偏航
             joint_symmetry = 0.8
             # contact 
             feet_contact_forces = -0.01

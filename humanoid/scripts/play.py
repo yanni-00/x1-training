@@ -105,7 +105,7 @@ def _draw_play_hud(img, env, robot_index, play_step, target_vel, current_vel_x, 
 PLAY_DT = 0.01
 VIDEO_RECORD_EVERY = 2
 
-FIXED_CMD_VX = 0.5  # X1 walk
+FIXED_CMD_VX = 0.25  # 小步线验收点：4Hz 节拍 × 0.25 → 步长 ≈6cm 涌现目标；在训练域 [0.1,0.5] 内
 
 # X1-12DOF short names (dof_names order)
 JOINT_SHORT_NAMES = [
@@ -172,7 +172,7 @@ def play(args):
     env_cfg.domain_rand.add_dof_lag = False
     env_cfg.domain_rand.add_imu_lag = False
     env_cfg.noise.curriculum = False
-    env_cfg.commands.heading_command = False  # v1+symmetry: play 与训练一致关 heading，yaw 稳定由 joint_symmetry 承担
+    env_cfg.commands.heading_command = False  # 同步训练配置：关闭 heading 跟踪
 
     # --- 踝关节阶跃辨识名义值（固定点，非随机区间）---
     # pitch: coulomb0.5 viscous0.225 arm0.15; roll: coulomb0.5 viscous0 arm0.035; tauLPF=8ms
@@ -234,7 +234,10 @@ def play(args):
     assert num_dof == 12, f"exp_010_1 expects 12 DOF, got {num_dof}"
     assert len(env.dof_names) == 12, f"dof_names len={len(env.dof_names)}"
 
-    print(f"[play] exp_010_add_ankle_parameter  X1-12DOF  fixed cmd={FIXED_CMD_VX} m/s")
+    print(f"[play] little_step_v1 (rv1+symmetry, cycle 0.5)  X1-12DOF  fixed cmd={FIXED_CMD_VX} m/s")
+    print(f"[play] heading_command={env_cfg.commands.heading_command}  "
+          f"target_feet_height={env_cfg.rewards.target_feet_height} "
+          f"max={env_cfg.rewards.target_feet_height_max}")
     print(f"[play] csv_log steps {csv_log_start}–{csv_log_end}")
     print("[play] ankle ID plant (nominal):")
     print(f"  pitch: Fc=0.5 B=0.225 arm=0.15 | roll: Fc=0.5 B=0 arm=0.035")
@@ -286,6 +289,7 @@ def play(args):
 
     all_dof_log = [[] for _ in range(num_dof)]  # (act_rad, des_rad, err_rad)
     body_yaw_log = []
+    swing_feet_z_log = []  # (side, feet_z_m) 非接触时刻脚底离地高度，拖地风险预检
 
     _csv_dir = "/personal/train-more"
     os.makedirs(_csv_dir, exist_ok=True)
@@ -418,6 +422,14 @@ def play(args):
 
         if csv_log_start <= i <= csv_log_end:
             _log_csv_step(i, vf_idx=_vf, actions_t=_last_actions)
+            # 拖地风险预检：非接触（fz<=1N）时刻的脚底离地高度
+            _fzl, _fzr, _lon, _ron = _foot_contacts()
+            _feet_z = (env.rigid_state[robot_index, env.feet_indices, 2]
+                       - env.cfg.rewards.feet_to_ankle_distance)
+            if not _lon:
+                swing_feet_z_log.append(('L', _feet_z[0].item()))
+            if not _ron:
+                swing_feet_z_log.append(('R', _feet_z[1].item()))
             logger.log_states(dict={
                 'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
                 'command_x': env.commands[robot_index, 0].item(),
@@ -442,6 +454,14 @@ def play(args):
             if body_yaw_log:
                 _byaws = _np.array([x[1] for x in body_yaw_log])
                 print(f"\n  body_yaw: mean={_np.mean(_byaws):+.1f}°  max={_np.max(_byaws):+.1f}°")
+            if swing_feet_z_log:
+                _szs = _np.array([x[1] for x in swing_feet_z_log]) * 1000  # mm
+                _szs_l = _np.array([x[1] for x in swing_feet_z_log if x[0] == 'L']) * 1000
+                _szs_r = _np.array([x[1] for x in swing_feet_z_log if x[0] == 'R']) * 1000
+                print(f"\n  swing 离地间隙(mm): min={_np.min(_szs):.1f}  p5={_np.percentile(_szs, 5):.1f}  "
+                      f"mean={_np.mean(_szs):.1f}  峰值≈p95={_np.percentile(_szs, 95):.1f}")
+                print(f"  L: min={_np.min(_szs_l):.1f}  R: min={_np.min(_szs_r):.1f}  "
+                      f"(判据: min<5mm 无真机裕度，不装机)")
             print("=" * 68)
 
         if infos["episode"]:
