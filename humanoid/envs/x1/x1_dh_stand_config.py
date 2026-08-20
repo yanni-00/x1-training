@@ -311,7 +311,8 @@ class X1DHStandCfg(LeggedRobotCfg):
         class ranges:
             # 小步线：收窄到低速域。固定 4Hz 节拍下步长=vx/4：cmd 1.2→30cm 与 0.02 抬脚运动学不可行（v6 cmd 0.5 已碎步 17cm）；
             # [0.1,0.5] → 步长 2.5-12.5cm，且保留小幅域随机化
-            lin_vel_x = [0.1, 0.5] # min max [m/s]
+            # v2：扩负向 [-0.4,0.5]——真机手柄需后退；-0.4 运动学可行（4Hz 下后退步长 ~10cm）；后退属新技能，平台 resume 续训
+            lin_vel_x = [-0.4, 0.5] # min max [m/s]
             lin_vel_y = [-0.4, 0.4]   # min max [m/s]
             ang_vel_yaw = [-0.6, 0.6]    # min max [rad/s]
             heading = [-3.14, 3.14]
@@ -337,8 +338,11 @@ class X1DHStandCfg(LeggedRobotCfg):
         # if true negative total rewards are clipped at zero (avoids early termination problems)
         only_positive_rewards = True
         # tracking reward = exp(-error*sigma)
-        tracking_sigma = 5 
+        tracking_sigma = 5
         max_contact_force = 700  # forces above this value are penalized
+        # v2 yaw_anchor：角度锚定 σ。0.2 rad 校准依据：little_step_v1 实测漂移 0.05 rad/s×10s≈0.5 rad → err/σ=2.5 惩罚饱满；
+        # 正常 ±2°（0.035 rad）抖动 err/σ≈0.17 → exp(-0.03)≈0.97 不受罚
+        yaw_anchor_sigma = 0.2
         
         class scales:
             ref_joint_pos = 2.2
@@ -354,6 +358,9 @@ class X1DHStandCfg(LeggedRobotCfg):
             knee_distance = 0.2
             # 左右镜像对称（hip_roll/hip_yaw/ankle_roll 非镜像分量）：治关 heading 后的持续偏航
             joint_symmetry = 0.8
+            # v2 yaw 角度锚定（heading=False 下的角度积分通道）：治 symmetry 管不到的动力学不对称累积
+            # （little_step_v1 实测 +2.84°/s、10s +28.4°）；scale 取 tracking_ang_vel 1.1 之半，起步保守
+            yaw_anchor = 0.5
             # contact 
             feet_contact_forces = -0.01
             # vel tracking
