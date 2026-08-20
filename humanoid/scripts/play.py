@@ -280,6 +280,8 @@ def play(args):
         env.commands[:, 1] = 0.0
         env.commands[:, 2] = 0.0
         env.commands[:, 3] = 0.0
+        # v3 yaw_hold：play 手写指令绕过 resample，raw 必须同步，否则注入会覆盖掉手柄/固定指令
+        env.raw_yaw_cmd[:] = env.commands[:, 2]
         print(f"[play] cold start cmd={env.commands[0, 0].item():.2f} m/s")
 
     frame_count = 0
@@ -411,6 +413,8 @@ def play(args):
             env.commands[:, 1] = y_vel_cmd
             env.commands[:, 2] = yaw_vel_cmd
             env.commands[:, 3] = 0.0
+        # v3 yaw_hold：同步 raw（wz=0 时注入 hold 纠偏，即 play 验证场景；推杆时透传）
+        env.raw_yaw_cmd[:] = env.commands[:, 2]
 
         obs, critic_obs, rews, dones, infos = env.step(actions.detach())
 

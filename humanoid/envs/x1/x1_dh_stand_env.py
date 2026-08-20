@@ -203,6 +203,8 @@ class X1DHStandEnv(LeggedRobot):
                 resample_command = getattr(self, name)
                 # resample_command stands for _resample_stand_command/_resample_walk_sagittal_command/...
                 resample_command(env_ids)
+                # v3 yaw_hold：仅在真正 resample 的分支捕获原始 wz（每步全量捕获会吃到注入值造成污染）
+                self.raw_yaw_cmd[env_ids] = self.commands[env_ids, 2].clone()
 
     def _resample_stand_command(self, env_ids):
         self.commands[env_ids, 0] = torch.zeros(len(env_ids), device=self.device)
@@ -258,15 +260,22 @@ class X1DHStandEnv(LeggedRobot):
             heading = torch.atan2(forward[:, 1], forward[:, 0])
             self.commands[:, 2] = torch.clip(0.5*wrap_to_pi(self.commands[:, 3] - heading), -1., 1.)
 
-        # v2 yaw_anchor 锚点维护：转向指令中不罚（转向是合法动作）；
-        # 转向→回中的首步，锚点重置为当前朝向（手柄语义：转完即新基准，无回拉），与 joint_symmetry 同用 0.15 门控
-        turning_now = torch.abs(self.commands[:, 2]) > 0.15
-        recenter = (~turning_now) & (torch.abs(self.prev_yaw_cmd) > 0.15)
-        if recenter.any():
+        # v3 yaw_hold：近零段注入角度纠偏，借 tracking_ang_vel 闭环（v2 reward 版三层缺陷：强度9:1劣势/
+        # 与速率项对撞/24s积分信用分配，全部由"信号走指令通道"消除）。门控 0.15 与 joint_symmetry 对齐。
+        if self.cfg.commands.yaw_hold:
+            turning = torch.abs(self.raw_yaw_cmd) > 0.15
+            # 边沿 recenter：转向→回中首步，锚点重置为当前朝向（手柄语义：转完即新基准，无回拉）
+            recenter = (~turning) & self.prev_turning
             forward = quat_apply(self.base_quat, self.forward_vec)
             yaw_now = torch.atan2(forward[:, 1], forward[:, 0])
-            self.anchor_yaw[recenter] = yaw_now[recenter]
-        self.prev_yaw_cmd = self.commands[:, 2].clone()
+            if recenter.any():
+                self.anchor_yaw[recenter] = yaw_now[recenter]
+            self.prev_turning = turning.clone()
+            # 静止段注入纠偏指令；转向段透传原始指令
+            hold_wz = torch.clip(
+                self.cfg.commands.yaw_hold_gain * wrap_to_pi(self.anchor_yaw - yaw_now),
+                -self.cfg.commands.yaw_hold_clip, self.cfg.commands.yaw_hold_clip)
+            self.commands[:, 2] = torch.where(turning, self.raw_yaw_cmd, hold_wz)
 
         if self.cfg.terrain.measure_heights:
             # get all robot surrounding height
@@ -557,11 +566,11 @@ class X1DHStandEnv(LeggedRobot):
         
         self.base_quat[env_ids] = self.root_states[env_ids, 3:7]
         self.base_euler_xyz = get_euler_xyz_tensor(self.base_quat)
-        # v2 yaw_anchor：episode 起始锚点=初始朝向；prev 清零避免 reset 后误触发 recenter
-        # 注意 forward_vec 是全集 (num_envs,3)，必须同样按 env_ids 取子集，否则部分 reset 时形状不匹配
+        # v3 yaw_hold：episode 锚点=初始朝向；prev_turning 清 False（当前 init rot 为 identity → anchor=0，
+        # 但按实际朝向取值保持通用）。forward_vec 是全集 (num_envs,3)，必须同步 [env_ids] 取子集（v2 形状 bug 教训）
         fwd = quat_apply(self.base_quat[env_ids], self.forward_vec[env_ids])
         self.anchor_yaw[env_ids] = torch.atan2(fwd[:, 1], fwd[:, 0])
-        self.prev_yaw_cmd[env_ids] = 0.
+        self.prev_turning[env_ids] = False
         self.projected_gravity[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.gravity_vec[env_ids])
         self.base_lin_vel[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.root_states[env_ids, 7:10])
         self.base_ang_vel[env_ids] = quat_rotate_inverse(self.base_quat[env_ids], self.root_states[env_ids, 10:13])
@@ -583,9 +592,10 @@ class X1DHStandEnv(LeggedRobot):
         self.phase_length_buf = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.long)
         self.gait_start = torch.randint(0, 2, (self.num_envs,)).to(self.device)*0.5
-        # v2 yaw_anchor：航向锚点（reward 对 yaw - anchor_yaw 积分偏差惩罚）；prev_yaw_cmd 用于检测转向→回中的边沿
+        # v3 yaw_hold：锚点/原始指令/上步转向态（注入会覆写 commands[:,2]，raw 必须独立 buffer）
         self.anchor_yaw = torch.zeros(self.num_envs, device=self.device)
-        self.prev_yaw_cmd = torch.zeros(self.num_envs, device=self.device)
+        self.raw_yaw_cmd = torch.zeros(self.num_envs, device=self.device)
+        self.prev_turning = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
 
 # ================================================ Rewards ================================================== #
     def _reward_ref_joint_pos(self):
@@ -707,25 +717,6 @@ class X1DHStandEnv(LeggedRobot):
                    + torch.abs(d[:, 2] + d[:, 8])   # hip_yaw L+R
                    + torch.abs(d[:, 5] + d[:, 11])) # ankle_roll L+R
         r = torch.exp(-sym_err * 30.)
-        turning = torch.abs(self.commands[:, 2]) > 0.15
-        r[turning] = 1.
-        return r
-
-    def _reward_yaw_anchor(self):
-        """
-        v2: Yaw angular-position anchoring (the integration channel that heading=False lacks).
-        joint_symmetry only constrains joint-angle mirroring; it cannot touch stance-dynamics
-        asymmetry (little_step_v1: fz L/R 18% diff, stride 1.8cm diff -> +1.4 deg/step residual).
-        tracking_ang_vel=1.1 only penalizes rate (~0 penalty at 0.05 rad/s under exp kernel), so a
-        small same-sign rate integrates unchecked (+2.84 deg/s, +28.4 deg over 10s observed).
-        This reward penalizes the integrated yaw error vs an anchor that recenters after each
-        deliberate turn (hand-controller semantics: no pull-back to old heading). Gated off while
-        turning, sharing the 0.15 threshold with joint_symmetry.
-        """
-        forward = quat_apply(self.base_quat, self.forward_vec)
-        yaw_now = torch.atan2(forward[:, 1], forward[:, 0])
-        yaw_err = wrap_to_pi(yaw_now - self.anchor_yaw)
-        r = torch.exp(-(yaw_err / self.cfg.rewards.yaw_anchor_sigma) ** 2)
         turning = torch.abs(self.commands[:, 2]) > 0.15
         r[turning] = 1.
         return r
