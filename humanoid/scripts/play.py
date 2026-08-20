@@ -172,7 +172,7 @@ def play(args):
     env_cfg.domain_rand.add_dof_lag = False
     env_cfg.domain_rand.add_imu_lag = False
     env_cfg.noise.curriculum = False
-    env_cfg.commands.heading_command = True  # exp_heading: play 时也开启 heading 跟踪
+    env_cfg.commands.heading_command = False  # v1+symmetry: play 与训练一致关 heading，yaw 稳定由 joint_symmetry 承担
 
     # --- 踝关节阶跃辨识名义值（固定点，非随机区间）---
     # pitch: coulomb0.5 viscous0.225 arm0.15; roll: coulomb0.5 viscous0 arm0.035; tauLPF=8ms
@@ -184,18 +184,19 @@ def play(args):
     env_cfg.domain_rand.ankle_roll_joint_coulomb_range = [0.5, 0.5]
     env_cfg.domain_rand.ankle_roll_joint_viscous_range = [0.0, 0.0]
 
+    # play armature 固定标称值（训练 DR 中心值），与 x1_dh_stand_config.py 一致
     env_cfg.domain_rand.randomize_joint_armature = True
     env_cfg.domain_rand.randomize_joint_armature_each_joint = True
-    for _ji in range(1, 13):
-        setattr(env_cfg.domain_rand, f'joint_{_ji}_armature_range', [0.0, 0.0])
-    env_cfg.domain_rand.joint_1_armature_range = [0.196, 0.196]    # left_hip_pitch
-    env_cfg.domain_rand.joint_3_armature_range = [0.0148, 0.0148]  # left_hip_yaw
-    env_cfg.domain_rand.joint_4_armature_range = [0.2499, 0.2499]  # left_knee_pitch
+    env_cfg.domain_rand.joint_1_armature_range = [0.208, 0.208]    # left_hip_pitch (L/R 平均)
+    env_cfg.domain_rand.joint_2_armature_range = [0.025, 0.025]    # left_hip_roll (DR 中心)
+    env_cfg.domain_rand.joint_3_armature_range = [0.0148, 0.0148]  # left_hip_yaw (L/R 平均)
+    env_cfg.domain_rand.joint_4_armature_range = [0.2728, 0.2728]  # left_knee_pitch (L/R 平均)
     env_cfg.domain_rand.joint_5_armature_range = [0.15, 0.15]      # left_ankle_pitch
     env_cfg.domain_rand.joint_6_armature_range = [0.035, 0.035]    # left_ankle_roll
-    env_cfg.domain_rand.joint_7_armature_range = [0.129, 0.129]    # right_hip_pitch
-    env_cfg.domain_rand.joint_9_armature_range = [0.006, 0.006]    # right_hip_yaw
-    env_cfg.domain_rand.joint_10_armature_range = [0.2464, 0.2464] # right_knee_pitch
+    env_cfg.domain_rand.joint_7_armature_range = [0.208, 0.208]    # right_hip_pitch (同 L)
+    env_cfg.domain_rand.joint_8_armature_range = [0.025, 0.025]    # right_hip_roll (DR 中心)
+    env_cfg.domain_rand.joint_9_armature_range = [0.0148, 0.0148]  # right_hip_yaw (同 L)
+    env_cfg.domain_rand.joint_10_armature_range = [0.2728, 0.2728] # right_knee_pitch (同 L)
     env_cfg.domain_rand.joint_11_armature_range = [0.15, 0.15]     # right_ankle_pitch
     env_cfg.domain_rand.joint_12_armature_range = [0.035, 0.035]   # right_ankle_roll
 
@@ -292,7 +293,8 @@ def play(args):
     _csv_headers = [
         'step', 'video_frame', 'time_s', 'phase',
         'base_roll', 'base_pitch', 'base_yaw',
-        'cmd_x', 'base_vel_x', 'foot_fz_l', 'foot_fz_r', 'gait_state',
+        'cmd_x', 'base_vel_x', 'base_vel_y', 'base_pos_x', 'base_pos_y',
+        'foot_fz_l', 'foot_fz_r', 'gait_state',
     ]
     for _sn in JOINT_SHORT_NAMES:
         # X1 无 motion ref：des = PD 目标 (default + action*scale)
@@ -329,7 +331,10 @@ def play(args):
         _body_yaw_deg = env.base_euler_xyz[robot_index, 2].item() * 57.3
         _fz_l, _fz_r, _l_on, _r_on = _foot_contacts()
         _gait = _gait_state_label(_l_on, _r_on)
-        _base_vx = env.base_lin_vel[robot_index, 0].item()
+        _base_vx = env.root_states[robot_index, 7].item()
+        _base_vy = env.root_states[robot_index, 8].item()
+        _base_px = env.root_states[robot_index, 0].item()
+        _base_py = env.root_states[robot_index, 1].item()
         _cmd_x = env.commands[robot_index, 0].item()
         _time_s = max(play_step, 0) * PLAY_DT
         _row = [
@@ -338,7 +343,8 @@ def play(args):
             f"{_time_s:.4f}",
             f"{_phase:.4f}",
             f"{_body_roll_deg:.3f}", f"{_body_pitch_deg:.3f}", f"{_body_yaw_deg:.3f}",
-            f"{_cmd_x:.4f}", f"{_base_vx:.4f}",
+            f"{_cmd_x:.4f}", f"{_base_vx:.4f}", f"{_base_vy:.4f}",
+            f"{_base_px:.4f}", f"{_base_py:.4f}",
             f"{_fz_l:.2f}", f"{_fz_r:.2f}", _gait,
         ]
         for des, act, err in _joint_des_act_err(actions_t):
@@ -387,7 +393,7 @@ def play(args):
     if _vf_reset > 0:
         print(f"[sync] reset 标定帧 → video_frame={_vf_reset}  step=-1")
 
-    for i in range(10 * stop_state_log):
+    for i in range(3 * stop_state_log):  # 30s 视频（0.01s/步；CSV 窗口 0-999 不变）
         actions = policy(obs.detach())
         _last_actions = actions.detach()
 

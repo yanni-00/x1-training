@@ -613,9 +613,9 @@ class X1DHStandEnv(LeggedRobot):
         and the speed of the feet. A contact threshold is used to determine if the foot is in contact 
         with the ground. The speed of the foot is calculated and scaled by the contact conditions.
         """
-        contact = self.contact_forces[:, self.feet_indices, 2] > 5.
+        contact = self.contact_forces[:, self.feet_indices, 2] > 40.
         foot_speed_norm = torch.norm(self.rigid_state[:, self.feet_indices, 10:12], dim=2)
-        rew = torch.sqrt(foot_speed_norm)
+        rew = foot_speed_norm
         rew *= contact
         return torch.sum(rew, dim=1)
 
@@ -625,7 +625,7 @@ class X1DHStandEnv(LeggedRobot):
         checking the first contact with the ground after being in the air. The air time is
         limited to a maximum value for reward calculation.
         """
-        contact = self.contact_forces[:, self.feet_indices, 2] > 5.
+        contact = self.contact_forces[:, self.feet_indices, 2] > 40.
         stance_mask = self._get_stance_mask().clone()
         stance_mask[torch.norm(self.commands[:, :3], dim=1) < 0.05] = 1
         self.contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
@@ -641,10 +641,10 @@ class X1DHStandEnv(LeggedRobot):
         Calculates a reward based on the number of feet contacts aligning with the gait phase. 
         Rewards or penalizes depending on whether the foot contact matches the expected gait phase.
         """
-        contact = self.contact_forces[:, self.feet_indices, 2] > 5.
+        contact = self.contact_forces[:, self.feet_indices, 2] > 40.
         stance_mask = self._get_stance_mask().clone()
         stance_mask[torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold] = 1
-        reward = torch.where(contact == stance_mask, 1, -0.3)
+        reward = torch.where(contact == stance_mask, 1, -1.0)
         return torch.mean(reward, dim=1)
 
     def _reward_orientation(self):
@@ -674,6 +674,26 @@ class X1DHStandEnv(LeggedRobot):
         yaw_roll = torch.norm(left_yaw_roll, dim=1) + torch.norm(right_yaw_roll, dim=1)
         yaw_roll = torch.clamp(yaw_roll - 0.1, 0, 50)
         return torch.exp(-yaw_roll * 100) - 0.01 * torch.norm(joint_diff, dim=1)
+
+    def _reward_joint_symmetry(self):
+        """
+        Penalizes the non-mirror-symmetric component of hip_roll/hip_yaw/ankle_roll.
+        For mirror joints, q_left + q_right should stay at the default mirror sum (0).
+        A persistent asymmetric hip_yaw/ankle_roll offset acts as a constant yaw torque
+        and drives circling (real 20260818: all-rv1 yaw drift +13.9 deg/s, sim ankle
+        asym 2% amplified on hardware). Gated off for |ang_vel_yaw cmd| > 0.15, where
+        differential hip_yaw is the legitimate turning actuator.
+        v7 sim evidence: heading=False + this reward -> yaw rate 0.61 deg/s (vs -2.75
+        without), hp_err RMS also improved.
+        """
+        d = self.dof_pos - self.default_dof_pos
+        sym_err = (torch.abs(d[:, 1] + d[:, 7])   # hip_roll L+R
+                   + torch.abs(d[:, 2] + d[:, 8])   # hip_yaw L+R
+                   + torch.abs(d[:, 5] + d[:, 11])) # ankle_roll L+R
+        r = torch.exp(-sym_err * 30.)
+        turning = torch.abs(self.commands[:, 2]) > 0.15
+        r[turning] = 1.
+        return r
 
     def _reward_base_height(self):
         """

@@ -147,7 +147,7 @@ class X1DHStandCfg(LeggedRobotCfg):
         stiffness = {'hip_pitch_joint': 30, 'hip_roll_joint': 40,'hip_yaw_joint': 35,
                      'knee_pitch_joint': 100, 'ankle_pitch_joint': 35, 'ankle_roll_joint': 35}
         damping = {'hip_pitch_joint': 3, 'hip_roll_joint': 3.0,'hip_yaw_joint': 4, 
-                   'knee_pitch_joint': 10, 'ankle_pitch_joint': 1.5, 'ankle_roll_joint': 1.5}
+                   'knee_pitch_joint': 8, 'ankle_pitch_joint': 1.5, 'ankle_roll_joint': 1.5}
 
         # action scale: target angle = actionScale * action + defaultAngle
         action_scale = 0.5
@@ -238,17 +238,17 @@ class X1DHStandCfg(LeggedRobotCfg):
         randomize_joint_armature = True
         randomize_joint_armature_each_joint = True
         joint_armature_range = [0.0001, 0.05]     # Factor (unused when each_joint=True)
-        # joint_N = dof index N-1; ID armature ±20% DR, play 时固定为标称值
-        joint_1_armature_range = [0.1568, 0.2352]    # left_hip_pitch, ID arm=0.196 ±20%
+        # joint_N = dof index N-1; hip_pitch/hip_yaw/knee_pitch 取 L/R 辨识中心平均（对称化），±20% DR
+        joint_1_armature_range = [0.1664, 0.2496]    # left_hip_pitch, L/R 平均 arm=0.208 (0.242/0.174) ±20%
         joint_2_armature_range = [0.0001, 0.05]      # left_hip_roll, 未辨识
-        joint_3_armature_range = [0.01184, 0.01776]  # left_hip_yaw, ID arm=0.0148 ±20%
-        joint_4_armature_range = [0.19992, 0.29988]  # left_knee_pitch, ID arm=0.2499 ±20%
+        joint_3_armature_range = [0.01184, 0.01776]  # left_hip_yaw, L/R 平均 arm=0.0148 (0.0192/0.0104) ±20%
+        joint_4_armature_range = [0.21824, 0.32736]  # left_knee_pitch, L/R 平均 arm=0.2728 (0.2744/0.2712) ±20%
         joint_5_armature_range = [0.12, 0.18]        # left_ankle_pitch, ID arm=0.15 ±20%
         joint_6_armature_range = [0.028, 0.042]      # left_ankle_roll, ID arm=0.035 ±20%
-        joint_7_armature_range = [0.1032, 0.1548]    # right_hip_pitch, ID arm=0.129 ±20%
+        joint_7_armature_range = [0.1664, 0.2496]    # right_hip_pitch, 同 L（对称）
         joint_8_armature_range = [0.0001, 0.05]      # right_hip_roll, 未辨识
-        joint_9_armature_range = [0.0048, 0.0072]    # right_hip_yaw, ID arm=0.006 ±20%
-        joint_10_armature_range = [0.19712, 0.29568] # right_knee_pitch, ID arm=0.2464 ±20%
+        joint_9_armature_range = [0.01184, 0.01776]  # right_hip_yaw, 同 L（对称）
+        joint_10_armature_range = [0.21824, 0.32736] # right_knee_pitch, 同 L（对称）
         joint_11_armature_range = [0.12, 0.18]       # right_ankle_pitch, ID arm=0.15 ±20%
         joint_12_armature_range = [0.028, 0.042]     # right_ankle_roll, ID arm=0.035 ±20%
 
@@ -304,7 +304,7 @@ class X1DHStandCfg(LeggedRobotCfg):
                            "stand": [2,3],
                            "walk_omnidirectional": [4,6]}
 
-        heading_command = True  # exp_heading: 开启 heading 跟踪，ang_vel 由 heading 误差实时算
+        heading_command = False  # v1+symmetry: 关闭 heading 跟踪，yaw 稳定改由 joint_symmetry reward 承担（v7 sim 验证 heading=False 下 symmetry 可稳 yaw）
         stand_com_threshold = 0.05 # if (lin_vel_x, lin_vel_y, ang_vel_yaw).norm < this, robot should stand
         sw_switch = True # use stand_com_threshold or not
 
@@ -340,9 +340,12 @@ class X1DHStandCfg(LeggedRobotCfg):
             feet_contact_number = 2.0
             # gait
             feet_air_time = 1.2
-            foot_slip = -0.1
+            foot_slip = -1.0
             feet_distance = 0.2
             knee_distance = 0.2
+            # 左右镜像对称（hip_roll/hip_yaw/ankle_roll 非镜像分量）：治真机 yaw 漂 +13.9°/s
+            # （v7 sim 验证：heading=False 下 yaw -2.75→0.61°/s、hp_err 同步降；v3b 真机缺此约束致偏航）
+            joint_symmetry = 0.8
             # contact 
             feet_contact_forces = -0.01
             # vel tracking
