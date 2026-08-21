@@ -291,7 +291,7 @@ class X1DHStandCfg(LeggedRobotCfg):
         delivery_joint_ids = [4, 5, 10, 11]  # L/R ankle pitch/roll (0-based)
         
     class commands(LeggedRobotCfg.commands):
-        curriculum = True
+        curriculum = False
         max_curriculum = 1.5
         # Vers: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         num_commands = 4
@@ -309,7 +309,8 @@ class X1DHStandCfg(LeggedRobotCfg):
         # |raw_wz|>门控0.15 时透传（转向语义不变）；近零段注入 clip(gain×wrap(anchor−yaw)) 借 tracking_ang_vel=1.1 闭环；
         # 转向→回中边沿 recenter anchor=当前 yaw（手柄语义：转完即新基准，无回拉）
         yaw_hold = True
-        yaw_hold_gain = 0.5   # 纠偏增益（heading 环同值）
+        yaw_hold_gain = 1.0   # v4：0.5→1.0。v3 实测 gain=0.5 时 P 控制稳态平衡点 11°（纠偏力=固有漂移力所需 err），
+                              # 增益翻倍平衡点减半至 ~5-6°，10s 累积可入 <10° 验收线；clip 不变故指令域不外扩
         yaw_hold_clip = 0.25  # 纠偏上限 rad/s（弱修正，避免与前向跟踪抢容量；正常转向指令量级）
         stand_com_threshold = 0.05 # if (lin_vel_x, lin_vel_y, ang_vel_yaw).norm < this, robot should stand
         sw_switch = True # use stand_com_threshold or not
