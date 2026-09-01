@@ -206,7 +206,10 @@ class X1DHStandCfg(LeggedRobotCfg):
 
         randomize_motor_offset = True
         motor_offset_range = [-0.035, 0.035] # Offset to add to the motor angles
-        
+        # ankle_roll 单独扩域：真机实测 R ankle_roll 零位 +0.052（robustness_tuning_report.md L185），
+        # 超出通用 ±0.035 覆盖范围；仅 ankle_roll（dof 5/11）用此域，其余 10 关节维持 ±0.035
+        ankle_roll_motor_offset_range = [-0.055, 0.055]
+
         randomize_joint_friction = True
         randomize_joint_friction_each_joint = False
         joint_friction_range = [0.01, 1.15]
@@ -291,20 +294,25 @@ class X1DHStandCfg(LeggedRobotCfg):
         delivery_joint_ids = [4, 5, 10, 11]  # L/R ankle pitch/roll (0-based)
         
     class commands(LeggedRobotCfg.commands):
+        # v4 事故教训（20260821 真机失败链查因）：curriculum=True 曾在 ~9000 轮把 max_cmd_x 0.5→1.0
+        # 扩域污染（高 vx 样本负迁移）。小步/低抬线 cmd 域收窄是有意设计，课程扩域与它直接冲突 → 必须 False
         curriculum = False
         max_curriculum = 1.5
         # Vers: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         num_commands = 4
         resampling_time = 25.  # time before command are changed[s]
-        gait = ["walk_omnidirectional","stand","walk_omnidirectional"] # gait type during training
+        gait = ["walk_omnidirectional","walk_lateral","rotate","stand","walk_omnidirectional"] # gait type during training
         # proportion during whole life time
         gait_time_range = {"walk_sagittal": [2,6],
-                           "walk_lateral": [2,6],
+                           "walk_lateral": [2,3],
                            "rotate": [2,3],
                            "stand": [2,3],
                            "walk_omnidirectional": [4,6]}
 
-        heading_command = False  # 关闭 heading 跟踪：真机 yaw 依赖 IMU 积分有漂移，heading 环持续纠偏与 policy 能力失配；ang_vel_yaw 直接采样 [-0.6,0.6]，保留多命令鲁棒，偏航改由 reward 对称性约束治理
+        heading_command = False  # 关闭 heading 跟踪（heading=True 的绝对 0 目标在真机 IMU 漂移下追尾失配，0818 实测）
+        # v5 续训兼容性说明：基座 v3b（model_5000.pt，heading=True 训练）obs 里的 cmd_wz 本来就是
+        # 每步改写的角度纠偏 P 信号（clip(0.5×(heading_target−yaw), ±1)），与 yaw_hold 注入信号同族
+        # → policy「服从 cmd_wz」能力直接迁移，续训仅需适应 gain 0.5→1.0/clip 收窄 + 转向段 raw 透传
         # v3 yaw_hold：wz 速率指令为主、近零段角度锚定的混合机制（治 v1 实测 +2.84°/s 漂移、v2 reward 版证伪）
         # |raw_wz|>门控0.15 时透传（转向语义不变）；近零段注入 clip(gain×wrap(anchor−yaw)) 借 tracking_ang_vel=1.1 闭环；
         # 转向→回中边沿 recenter anchor=当前 yaw（手柄语义：转完即新基准，无回拉）
@@ -316,9 +324,9 @@ class X1DHStandCfg(LeggedRobotCfg):
         sw_switch = True # use stand_com_threshold or not
 
         class ranges:
-            # 小步线：收窄到低速域。固定 4Hz 节拍下步长=vx/4：cmd 1.2→30cm 与 0.02 抬脚运动学不可行（v6 cmd 0.5 已碎步 17cm）；
-            # [0.1,0.5] → 步长 2.5-12.5cm，且保留小幅域随机化
-            lin_vel_x = [0.1, 0.5] # min max [m/s]
+            # v5 低抬慢拍线：cycle 回 0.7（0818 真机验证锚点）→ 步长=vx/1.43。
+            # cmd 0.4 → 步长 28cm 封顶（0.5→35cm 偏大）；保留小幅域随机化
+            lin_vel_x = [0.1, 0.4] # min max [m/s]
             lin_vel_y = [-0.4, 0.4]   # min max [m/s]
             ang_vel_yaw = [-0.6, 0.6]    # min max [rad/s]
             heading = [-3.14, 3.14]
@@ -338,9 +346,11 @@ class X1DHStandCfg(LeggedRobotCfg):
         target_feet_height = 0.02
         target_feet_height_max = 0.04
         feet_to_ankle_distance = 0.041
-        # 小步线：节拍本身就是快拍。0.7→0.5 → 接触切换 4Hz（受控碎步替代 v6/v7 逃逸碎步）；
-        # cmd 0.25 → 步长 ≈6cm 由节拍涌现，不再要求 policy 压步幅
-        cycle_time = 0.5
+        # v5 核心变更（20260821 真机失败复盘）：cycle 0.5→0.7 回到 0818 真机验证锚点（1.43Hz 柔顺）。
+        # v4 教训：0.5s 节拍下 policy 用 3-4 倍动作量硬凑节拍（sim act p2p 45° vs 0814 真机 11° 安全区），
+        # 打折跟踪体系下误差绝对值放大 4 倍、余量归零 → 真机 t=2s 扰动即 OOD 发散。
+        # v5 目标重定义：「低抬慢拍」——抬脚 0.02 保留（真机踝偏置裕度），节拍回慢，步长由节拍自然决定
+        cycle_time = 0.7
         # if true negative total rewards are clipped at zero (avoids early termination problems)
         only_positive_rewards = True
         # tracking reward = exp(-error*sigma)
@@ -432,7 +442,8 @@ class X1DHStandCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = 'ActorCriticDH'
         algorithm_class_name = 'DHPPO'
         num_steps_per_env = 24  # per iteration
-        max_iterations = 2501  # number of policy updates
+        max_iterations = 2501
+          # number of policy updates
 
         # logging
         save_interval = 100  # check for potential saves every this many iterations

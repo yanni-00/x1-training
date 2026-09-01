@@ -133,10 +133,21 @@ class X1DHStandEnv(LeggedRobot):
         self.gym.set_actor_root_state_tensor(
             self.sim, gymtorch.unwrap_tensor(self.root_states))
 
+    def _get_stand_command(self):
+        """ stand 判定用原始用户指令：yaw_hold 会往 commands[:,2] 注入角度纠偏（clip 后可达 0.25），
+            若用注入后的 commands 判 stand，零指令站立段会因纠偏量 > 0.05 被误判为 walk，
+            gait phase 解冻、reference 切成 walk 轨迹。wz 取 raw_yaw_cmd（注入前的原始指令）。
+        """
+        if self.cfg.commands.yaw_hold:
+            raw_cmd = torch.stack((self.commands[:, 0], self.commands[:, 1], self.raw_yaw_cmd), dim=1)
+        else:
+            raw_cmd = self.commands[:, :3]
+        return torch.norm(raw_cmd, dim=1) <= self.cfg.commands.stand_com_threshold
+
     def  _get_phase(self):
         cycle_time = self.cfg.rewards.cycle_time
         if self.cfg.commands.sw_switch:
-            stand_command = (torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold)
+            stand_command = self._get_stand_command()
             self.phase_length_buf[stand_command] = 0 # set this as 0 for which env is standing
             # self.gait_start is rand 0 or 0.5
             phase = (self.phase_length_buf * self.dt / cycle_time + self.gait_start) * (~stand_command)
@@ -473,7 +484,7 @@ class X1DHStandEnv(LeggedRobot):
         ), dim=-1)
 
         if self.cfg.env.num_single_obs == 48:
-            stand_command = (torch.norm(self.commands[:, :3], dim=1, keepdim=True) <= self.cfg.commands.stand_com_threshold)
+            stand_command = self._get_stand_command().unsqueeze(1)  # 与 phase 判定同源（原始指令），避免注入纠偏翻转 stand 位
             obs_buf = torch.cat((obs_buf, stand_command),dim=1)
             
         if self.cfg.terrain.measure_heights:
@@ -604,7 +615,7 @@ class X1DHStandEnv(LeggedRobot):
         """
         joint_pos = self.dof_pos.clone()
         pos_target = self.ref_dof_pos.clone()
-        stand_command = (torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold)
+        stand_command = self._get_stand_command()  # 原始指令判定：纠偏注入不改变站立位目标
         pos_target[stand_command] = self.default_dof_pos.clone()
         diff = joint_pos - pos_target
         r = torch.exp(-2 * torch.norm(diff, dim=1)) - 0.2 * torch.norm(diff, dim=1).clamp(0, 0.5)
@@ -655,7 +666,7 @@ class X1DHStandEnv(LeggedRobot):
         """
         contact = self.contact_forces[:, self.feet_indices, 2] > 40.  # reward_v1 C3
         stance_mask = self._get_stance_mask().clone()
-        stance_mask[torch.norm(self.commands[:, :3], dim=1) < 0.05] = 1
+        stance_mask[self._get_stand_command()] = 1  # air_time：原始指令判定（原 < 0.05 硬编码）
         self.contact_filt = torch.logical_or(torch.logical_or(contact, stance_mask), self.last_contacts)
         self.last_contacts = contact
         first_contact = (self.feet_air_time > 0.) * self.contact_filt
@@ -671,7 +682,7 @@ class X1DHStandEnv(LeggedRobot):
         """
         contact = self.contact_forces[:, self.feet_indices, 2] > 40.  # reward_v1 C3
         stance_mask = self._get_stance_mask().clone()
-        stance_mask[torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold] = 1
+        stance_mask[self._get_stand_command()] = 1  # contact_number：原始指令判定
         reward = torch.where(contact == stance_mask, 1, -1.0)  # reward_v1 C2：-0.3→-1.0，节拍失配重罚（唯一验证过的节拍器：ank 4.4→1.9Hz）
         return torch.mean(reward, dim=1)
 
@@ -717,7 +728,12 @@ class X1DHStandEnv(LeggedRobot):
                    + torch.abs(d[:, 2] + d[:, 8])   # hip_yaw L+R
                    + torch.abs(d[:, 5] + d[:, 11])) # ankle_roll L+R
         r = torch.exp(-sym_err * 30.)
-        turning = torch.abs(self.commands[:, 2]) > 0.15
+        # 转向闸读原始指令：注入的 yaw_hold 纠偏 wz（可达 0.25）不应关闭对称约束，
+        # 否则站立纠偏段放行不对称 hip_yaw，回到 circling 根因；仅用户真实转向指令放行
+        if self.cfg.commands.yaw_hold:
+            turning = torch.abs(self.raw_yaw_cmd) > 0.15
+        else:
+            turning = torch.abs(self.commands[:, 2]) > 0.15
         r[turning] = 1.
         return r
 
@@ -779,7 +795,7 @@ class X1DHStandEnv(LeggedRobot):
         Tracks linear velocity commands along the xy axes. 
         Calculates a reward based on how closely the robot's linear velocity matches the commanded values.
         """
-        stand_command = (torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold)
+        stand_command = self._get_stand_command()  # tracking_lin：原始指令判定（误差仍对注入后 wz 闭环）
         lin_vel_error_square = torch.sum(torch.square(
             self.commands[:, :2] - self.base_lin_vel[:, :2]), dim=1)
         lin_vel_error_abs = torch.sum(torch.abs(
@@ -795,7 +811,7 @@ class X1DHStandEnv(LeggedRobot):
         Tracks angular velocity commands for yaw rotation.
         Computes a reward based on how closely the robot's angular velocity matches the commanded yaw values.
         """   
-        stand_command = (torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold)
+        stand_command = self._get_stand_command()  # tracking_ang：原始指令判定（误差仍对注入后 wz 闭环）
         ang_vel_error_square = torch.square(
             self.commands[:, 2] - self.base_ang_vel[:, 2])
         ang_vel_error_abs = torch.abs(
@@ -923,7 +939,7 @@ class X1DHStandEnv(LeggedRobot):
     
     def _reward_stand_still(self):
         # penalize motion at zero commands
-        stand_command = (torch.norm(self.commands[:, :3], dim=1) <= self.cfg.commands.stand_com_threshold)
+        stand_command = self._get_stand_command()  # 原始指令判定：纠偏注入不剥夺 stand_still 奖励
         r = torch.exp(-torch.sum(torch.square(self.dof_pos - self.default_dof_pos), dim=1))
         r = torch.where(stand_command, r.clone(),
                         torch.zeros_like(r))

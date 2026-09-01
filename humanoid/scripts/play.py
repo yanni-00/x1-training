@@ -48,8 +48,6 @@ import torch
 from datetime import datetime
 
 import csv
-import pygame
-from threading import Thread
 
 
 def _gait_state_label(left_on, right_on):
@@ -105,7 +103,34 @@ def _draw_play_hud(img, env, robot_index, play_step, target_vel, current_vel_x, 
 PLAY_DT = 0.01
 VIDEO_RECORD_EVERY = 2
 
-FIXED_CMD_VX = 0.25  # 小步线验收点：4Hz 节拍 × 0.25 → 步长 ≈6cm 涌现目标；在训练域 [0.1,0.5] 内
+# v5 八段时序验收：前进→停→慢前→停→横移→停→转向→停（32s）
+# 指令在 v5 训练域内（lin_vel_x [0.1,0.4] / lin_vel_y [-0.4,0.4] / ang_vel_yaw [-0.6,0.6]）：
+#   forward      (0.25,0,0)  主验收点（cycle0.7×0.25→步长≈17.5cm）
+#   slow_forward (0.15,0,0)  低速前向（替代 v6 倒退：v5 无负 vx 训练域）
+#   lateral      (0,0.15,0)  横移
+#   rotate       (0,0,0.2)   原地转（|raw_wz|>0.15 → yaw_hold 透传，不注入）
+#   stop         (0,0,0)     raw 零速；obs 的 cmd_wz 仍可由 yaw_hold 注入 hold_wz（±0.25）
+CMD_SCHEDULE = [
+    ("forward",      8.0, ( 0.25, 0.0,  0.0)),
+    ("stop",         2.0, ( 0.0,  0.0,  0.0)),
+    ("slow_forward", 8.0, ( 0.15, 0.0,  0.0)),
+    ("stop",         2.0, ( 0.0,  0.0,  0.0)),
+    ("lateral",      4.0, ( 0.0,  0.15, 0.0)),
+    ("stop",         2.0, ( 0.0,  0.0,  0.0)),
+    ("rotate",       4.0, ( 0.0,  0.0,  0.2)),
+    ("stop",         2.0, ( 0.0,  0.0,  0.0)),
+]
+SEG_TOTAL_S = sum(_d for _, _d, _ in CMD_SCHEDULE)      # 32s（8+2+8+2+4+2+4+2）
+SEG_TOTAL_STEPS = int(SEG_TOTAL_S / PLAY_DT)            # 3200 步
+
+def sched_at(t_s):
+    """返回 t_s 时刻的调度段 (label, (vx,vy,wz))；超出总时长返回末段。"""
+    _acc = 0.0
+    for _lbl, _dur, _cmd in CMD_SCHEDULE:
+        if t_s < _acc + _dur:
+            return _lbl, _cmd
+        _acc += _dur
+    return CMD_SCHEDULE[-1][0], CMD_SCHEDULE[-1][2]
 
 # X1-12DOF short names (dof_names order)
 JOINT_SHORT_NAMES = [
@@ -117,33 +142,6 @@ DOF_SUMMARY_GROUPS = [
     ('L_leg', [0, 1, 2, 3, 4, 5], ['hip_p', 'hip_r', 'hip_y', 'knee', 'ank_p', 'ank_r']),
     ('R_leg', [6, 7, 8, 9, 10, 11], ['hip_p', 'hip_r', 'hip_y', 'knee', 'ank_p', 'ank_r']),
 ]
-
-x_vel_cmd, y_vel_cmd, yaw_vel_cmd = 0.0, 0.0, 0.0
-joystick_use = True
-joystick_opened = False
-
-if joystick_use:
-    pygame.init()
-    try:
-        joystick = pygame.joystick.Joystick(0)
-        joystick.init()
-        joystick_opened = True
-    except Exception as e:
-        print(f"无法打开手柄：{e}")
-    exit_flag = False
-
-    def handle_joystick_input():
-        global exit_flag, x_vel_cmd, y_vel_cmd, yaw_vel_cmd
-        while not exit_flag:
-            pygame.event.get()
-            x_vel_cmd = -joystick.get_axis(1) * 1
-            y_vel_cmd = -joystick.get_axis(0) * 1
-            yaw_vel_cmd = -joystick.get_axis(3) * 1
-            pygame.time.delay(100)
-
-    if joystick_opened and joystick_use:
-        joystick_thread = Thread(target=handle_joystick_input)
-        joystick_thread.start()
 
 
 def play(args):
@@ -173,6 +171,9 @@ def play(args):
     env_cfg.domain_rand.add_imu_lag = False
     env_cfg.noise.curriculum = False
     env_cfg.commands.heading_command = False  # 同步训练配置：关闭 heading 跟踪
+    # play 手写八段调度：禁止训练 gait 边界 resample 覆盖 commands（x1 env 每步 _resample_commands）
+    env_cfg.commands.gait = ["walk_omnidirectional"]
+    env_cfg.commands.gait_time_range = {"walk_omnidirectional": [1.0e6, 1.0e6]}
 
     # --- 踝关节阶跃辨识名义值（固定点，非随机区间）---
     # pitch: coulomb0.5 viscous0.225 arm0.15; roll: coulomb0.5 viscous0 arm0.035; tauLPF=8ms
@@ -208,6 +209,8 @@ def play(args):
     print("train_cfg.runner_class_name:", train_cfg.runner_class_name)
 
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
+    # reset 后 gait_time 已生成；play 窗口内不再触发 resample
+    env.gait_time[:] = 10**9
     env.set_camera(env_cfg.viewer.pos, env_cfg.viewer.lookat)
 
     train_cfg.runner.resume = True
@@ -226,18 +229,21 @@ def play(args):
 
     logger = Logger(env_cfg.sim.dt * env_cfg.control.decimation)
     robot_index = 0
-    stop_state_log = 1000
     csv_log_start = 0
-    csv_log_end = stop_state_log - 1
+    csv_log_end = SEG_TOTAL_STEPS - 1  # CSV 覆盖全部八段（gate 分析需各段完整数据）
     num_dof = env_cfg.env.num_actions  # 12
 
     assert num_dof == 12, f"exp_010_1 expects 12 DOF, got {num_dof}"
     assert len(env.dof_names) == 12, f"dof_names len={len(env.dof_names)}"
 
-    print(f"[play] little_step_v1 (rv1+symmetry, cycle 0.5)  X1-12DOF  fixed cmd={FIXED_CMD_VX} m/s")
+    print(f"[play] little_step_v5 gate (域 x[0.1,0.4], cycle 0.7, 低抬 0.02, yaw_hold)  X1-12DOF")
+    print(f"[play] 八段时序 总长 {SEG_TOTAL_S}s / {SEG_TOTAL_STEPS} 步: " +
+          " → ".join(f"{_l}({_d:.0f}s)" for _l, _d, _ in CMD_SCHEDULE))
     print(f"[play] heading_command={env_cfg.commands.heading_command}  "
+          f"yaw_hold={env_cfg.commands.yaw_hold}  "
           f"target_feet_height={env_cfg.rewards.target_feet_height} "
           f"max={env_cfg.rewards.target_feet_height_max}")
+    print("[play] yaw_hold: raw_wz=0 段 → obs cmd_wz=hold_wz(±clip); |raw_wz|>0.15 → 透传 raw（仅 rotate 段）")
     print(f"[play] csv_log steps {csv_log_start}–{csv_log_end}")
     print("[play] ankle ID plant (nominal):")
     print(f"  pitch: Fc=0.5 B=0.225 arm=0.15 | roll: Fc=0.5 B=0 arm=0.035")
@@ -275,14 +281,15 @@ def play(args):
         video = cv2.VideoWriter(video_filepath, fourcc, 50.0, (1920, 1080))
 
     obs = env.get_observations()
-    if FIX_COMMAND:
-        env.commands[:, 0] = FIXED_CMD_VX
-        env.commands[:, 1] = 0.0
-        env.commands[:, 2] = 0.0
-        env.commands[:, 3] = 0.0
-        # v3 yaw_hold：play 手写指令绕过 resample，raw 必须同步，否则注入会覆盖掉手柄/固定指令
-        env.raw_yaw_cmd[:] = env.commands[:, 2]
-        print(f"[play] cold start cmd={env.commands[0, 0].item():.2f} m/s")
+    _lbl0, _cmd0 = sched_at(0.0)
+    env.commands[:, 0] = _cmd0[0]
+    env.commands[:, 1] = _cmd0[1]
+    env.commands[:, 2] = _cmd0[2]
+    env.commands[:, 3] = 0.0
+    # v3 yaw_hold：play 手写指令绕过 resample，raw 必须同步，否则注入会覆盖掉调度指令
+    env.raw_yaw_cmd[:] = env.commands[:, 2]
+    _prev_seg_label = None
+    print(f"[play] cold start seg={_lbl0} cmd={_cmd0}")
 
     frame_count = 0
     np.set_printoptions(formatter={'float': '{:0.4f}'.format})
@@ -299,8 +306,8 @@ def play(args):
     _csv_headers = [
         'step', 'video_frame', 'time_s', 'phase',
         'base_roll', 'base_pitch', 'base_yaw',
-        'cmd_x', 'base_vel_x', 'base_vel_y', 'base_pos_x', 'base_pos_y',
-        'foot_fz_l', 'foot_fz_r', 'gait_state',
+        'cmd_x', 'cmd_y', 'cmd_wz', 'raw_wz', 'base_vel_x', 'base_vel_y', 'base_vel_yaw', 'base_pos_x', 'base_pos_y',
+        'foot_fz_l', 'foot_fz_r', 'gait_state', 'cmd_scene',
     ]
     for _sn in JOINT_SHORT_NAMES:
         # X1 无 motion ref：des = PD 目标 (default + action*scale)
@@ -342,6 +349,10 @@ def play(args):
         _base_px = env.root_states[robot_index, 0].item()
         _base_py = env.root_states[robot_index, 1].item()
         _cmd_x = env.commands[robot_index, 0].item()
+        _cmd_y = env.commands[robot_index, 1].item()
+        _cmd_wz = env.commands[robot_index, 2].item()
+        _raw_wz = env.raw_yaw_cmd[robot_index].item()
+        _base_wz = env.root_states[robot_index, 11].item()  # root_states[10:13]=ang vel, z 分量
         _time_s = max(play_step, 0) * PLAY_DT
         _row = [
             play_step,
@@ -349,9 +360,11 @@ def play(args):
             f"{_time_s:.4f}",
             f"{_phase:.4f}",
             f"{_body_roll_deg:.3f}", f"{_body_pitch_deg:.3f}", f"{_body_yaw_deg:.3f}",
-            f"{_cmd_x:.4f}", f"{_base_vx:.4f}", f"{_base_vy:.4f}",
+            f"{_cmd_x:.4f}", f"{_cmd_y:.4f}", f"{_cmd_wz:.4f}", f"{_raw_wz:.4f}",
+            f"{_base_vx:.4f}", f"{_base_vy:.4f}", f"{_base_wz:.4f}",
             f"{_base_px:.4f}", f"{_base_py:.4f}",
             f"{_fz_l:.2f}", f"{_fz_r:.2f}", _gait,
+            sched_at(max(play_step, 0) * PLAY_DT)[0],
         ]
         for des, act, err in _joint_des_act_err(actions_t):
             _row += [f"{des * 57.3:.3f}", f"{act * 57.3:.3f}", f"{err * 57.3:.3f}"]
@@ -399,21 +412,20 @@ def play(args):
     if _vf_reset > 0:
         print(f"[sync] reset 标定帧 → video_frame={_vf_reset}  step=-1")
 
-    for i in range(3 * stop_state_log):  # 30s 视频（0.01s/步；CSV 窗口 0-999 不变）
+    for i in range(SEG_TOTAL_STEPS):  # 八段时序全程（0.01s/步），CSV 同窗口全覆盖
         actions = policy(obs.detach())
         _last_actions = actions.detach()
 
-        if FIX_COMMAND:
-            env.commands[:, 0] = FIXED_CMD_VX
-            env.commands[:, 1] = 0.0
-            env.commands[:, 2] = 0.0
-            env.commands[:, 3] = 0.0
-        else:
-            env.commands[:, 0] = x_vel_cmd
-            env.commands[:, 1] = y_vel_cmd
-            env.commands[:, 2] = yaw_vel_cmd
-            env.commands[:, 3] = 0.0
-        # v3 yaw_hold：同步 raw（wz=0 时注入 hold 纠偏，即 play 验证场景；推杆时透传）
+        # v6 八段调度：按运行时间取当前段指令；段切换打印一次
+        _seg_label, _seg_cmd = sched_at(i * PLAY_DT)
+        if _seg_label != _prev_seg_label:
+            print(f"[sched] t={i * PLAY_DT:5.1f}s  → {_seg_label:8s} cmd={_seg_cmd}")
+            _prev_seg_label = _seg_label
+        env.commands[:, 0] = _seg_cmd[0]
+        env.commands[:, 1] = _seg_cmd[1]
+        env.commands[:, 2] = _seg_cmd[2]
+        env.commands[:, 3] = 0.0
+        # v3 yaw_hold：同步 raw（wz=0 段注入 hold 纠偏；转向段透传）
         env.raw_yaw_cmd[:] = env.commands[:, 2]
 
         obs, critic_obs, rews, dones, infos = env.step(actions.detach())
@@ -436,11 +448,14 @@ def play(args):
                 swing_feet_z_log.append(('R', _feet_z[1].item()))
             logger.log_states(dict={
                 'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
+                'base_vel_y': env.base_lin_vel[robot_index, 1].item(),
                 'command_x': env.commands[robot_index, 0].item(),
+                'command_y': env.commands[robot_index, 1].item(),
+                'command_yaw': env.commands[robot_index, 2].item(),
                 'video_frame': _vf,
             })
 
-        elif i == stop_state_log:
+        if i == SEG_TOTAL_STEPS - 1:  # 八段全程结束：汇总（CSV 窗口已覆盖全程，独立触发）
             logger.plot_states()
             import numpy as _np
             print("\n" + "=" * 68)
@@ -484,6 +499,5 @@ def play(args):
 if __name__ == '__main__':
     EXPORT_POLICY = False
     RENDER = True
-    FIX_COMMAND = True
     args = get_args()
     play(args)

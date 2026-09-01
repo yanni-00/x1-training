@@ -421,6 +421,16 @@ class LeggedRobot(BaseTask):
         if self.cfg.domain_rand.randomize_motor_offset:
             min_offset, max_offset = self.cfg.domain_rand.motor_offset_range
             self.motor_offsets[env_ids, :] = torch_rand_float(min_offset, max_offset, (len(env_ids),self.num_actions), device=self.device)
+            # ankle_roll 零位单独扩域（按 dof 名匹配，X1 为 L/R ankle_roll = dof 5/11）：
+            # 真机实测 R ankle_roll 零位 +0.052 超出通用 ±0.035，其余关节维持原域
+            ankle_roll_range = getattr(self.cfg.domain_rand, 'ankle_roll_motor_offset_range', None)
+            if ankle_roll_range is not None:
+                ankle_roll_ids = torch.tensor([i for i, n in enumerate(self.dof_names) if 'ankle_roll' in n],
+                                              device=self.device, dtype=torch.long)
+                if len(ankle_roll_ids) > 0:
+                    self.motor_offsets[env_ids.unsqueeze(1), ankle_roll_ids] = torch_rand_float(
+                        ankle_roll_range[0], ankle_roll_range[1],
+                        (len(env_ids), len(ankle_roll_ids)), device=self.device)
         
         # rand kp kd gain
         if self.cfg.domain_rand.randomize_gains:
