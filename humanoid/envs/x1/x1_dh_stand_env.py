@@ -792,7 +792,7 @@ class X1DHStandEnv(LeggedRobot):
     
     def _reward_tracking_lin_vel(self):
         """
-        Tracks linear velocity commands along the xy axes. 
+        Tracks linear velocity commands along the xy axes.
         Calculates a reward based on how closely the robot's linear velocity matches the commanded values.
         """
         stand_command = self._get_stand_command()  # tracking_lin：原始指令判定（误差仍对注入后 wz 闭环）
@@ -803,6 +803,17 @@ class X1DHStandEnv(LeggedRobot):
         r_square = torch.exp(-lin_vel_error_square * self.cfg.rewards.tracking_sigma)
         r_abs = torch.exp(-lin_vel_error_abs * self.cfg.rewards.tracking_sigma * 2)
         r = torch.where(stand_command, r_abs, r_square)
+
+        # F1_cut06 结构升级（任务卡 F1_reward_struct §3，decision_log 20260914 行）：
+        # 折入 track_vel_hard 的线性梯度功能，治 exp 平坦区——σ=5 时低速区梯度≈0
+        #（爬行 0.05 vs 走准 0.25 m/s：r_square 0.82 vs 0.99，仅差 17%）→ M1 停 20% 平台的根因假说。
+        # 线性项 clamp(1 − err_xy/0.25, 0)·0.5 梯度恒定 −2.0/m/s 不饱和：
+        # 爬行 +0.1 vs 走准 +0.5，相对优势拉到 ~60%。k=0.5 取自被折函数 track_vel_hard 原权重。
+        # 不新增 reward 项（≤10 约束）；仅非 stand 且前进指令激活。
+        walk_forward = (~stand_command) & (self.commands[:, 0] > 0.05)
+        lin_err_norm = torch.norm(self.commands[:, :2] - self.base_lin_vel[:, :2], dim=1)
+        linear_grad = 0.5 * torch.clamp(1.0 - lin_err_norm / 0.25, min=0.0)
+        r = torch.where(walk_forward, r + linear_grad, r)
 
         return r
 

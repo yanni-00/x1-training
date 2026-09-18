@@ -309,14 +309,14 @@ class X1DHStandCfg(LeggedRobotCfg):
                            "stand": [2,3],
                            "walk_omnidirectional": [4,6]}
 
-        heading_command = False  # 关闭 heading 跟踪（heading=True 的绝对 0 目标在真机 IMU 漂移下追尾失配，0818 实测）
+        heading_command = True  # F1_cut07 A段：宽域相位 heading=True（两段协议）；B段 resume 前改回 False
         # v5 续训兼容性说明：基座 v3b（model_5000.pt，heading=True 训练）obs 里的 cmd_wz 本来就是
         # 每步改写的角度纠偏 P 信号（clip(0.5×(heading_target−yaw), ±1)），与 yaw_hold 注入信号同族
         # → policy「服从 cmd_wz」能力直接迁移，续训仅需适应 gain 0.5→1.0/clip 收窄 + 转向段 raw 透传
         # v3 yaw_hold：wz 速率指令为主、近零段角度锚定的混合机制（治 v1 实测 +2.84°/s 漂移、v2 reward 版证伪）
         # |raw_wz|>门控0.15 时透传（转向语义不变）；近零段注入 clip(gain×wrap(anchor−yaw)) 借 tracking_ang_vel=1.1 闭环；
         # 转向→回中边沿 recenter anchor=当前 yaw（手柄语义：转完即新基准，无回拉）
-        yaw_hold = True
+        yaw_hold = False  # F1_cut07 A段关闭（B段收窄相位恢复 True）
         yaw_hold_gain = 1.0   # v4：0.5→1.0。v3 实测 gain=0.5 时 P 控制稳态平衡点 11°（纠偏力=固有漂移力所需 err），
                               # 增益翻倍平衡点减半至 ~5-6°，10s 累积可入 <10° 验收线；clip 不变故指令域不外扩
         yaw_hold_clip = 0.25  # 纠偏上限 rad/s（弱修正，避免与前向跟踪抢容量；正常转向指令量级）
@@ -324,9 +324,8 @@ class X1DHStandCfg(LeggedRobotCfg):
         sw_switch = True # use stand_com_threshold or not
 
         class ranges:
-            # v5 低抬慢拍线：cycle 回 0.7（0818 真机验证锚点）→ 步长=vx/1.43。
-            # cmd 0.4 → 步长 28cm 封顶（0.5→35cm 偏大）；保留小幅域随机化
-            lin_vel_x = [0.1, 0.4] # min max [m/s]
+            # F1_cut07 A段：v3b 宽域（两段协议）；B段 resume 前改回 [0.1, 0.4]
+            lin_vel_x = [-0.4, 1.2] # min max [m/s]
             lin_vel_y = [-0.4, 0.4]   # min max [m/s]
             ang_vel_yaw = [-0.6, 0.6]    # min max [rad/s]
             heading = [-3.14, 3.14]
@@ -358,44 +357,49 @@ class X1DHStandCfg(LeggedRobotCfg):
         max_contact_force = 700  # forces above this value are penalized
         
         class scales:
+            # F1_cut00 (v0 建构轮): 28 项砍至 10 项，砍项置 0（任务卡 F1_reward_ablation §3 预注册，
+            # decision_log 20260910 行）。注释保留 v5 原值供 add-back 精确恢复。
+            # F1_cut01 (add-back 第1轮 20260911): 加回 feet_air_time 1.2 + default_joint_pos 1.0
+            # （decision_log 20260911 行，cut00 节律崩+构型崩对症），现保留 12 项 / 置 0 16 项。
+            # F1_cut02 (add-back 第2轮 20260911): 加回 feet_clearance 1.0（cut01 相位诊断：air_time
+            # 脱缰甩幅 des 2.5-3×，缺幅值约束；形态三角补齐时序+幅值），现保留 13 项 / 置 0 15 项。
+            # F1_cut03 (20260912): B 组 3 项加回提案被否决——线按证伪线收束（decision_log 20260912 行：
+            # add-back 两轮均<60% 触发卡面证伪；继续 add-back 只会收敛回原始 28 项集，且协议混变量
+            # 未排除）。config 定格为 cut02 实证配方：13 项生效 / 12 项置 0（cut03 的 16 项状态从未训练）。
+            # F1_cut04 (20260912 重开, ≤10项存在性试探): cut02 的 13 项 − default_joint_pos − collision
+            # − dof_torque_limits = 10 项（换入已证实的 air_time+clearance 对已在集合内；砍三个必要性
+            # 最弱项。决策背景：用户质疑"证伪"口径成立——cut00 单组合单种子非穷举，重开正面试探）。
+            # F1_cut07 (20260918, 卡第2槽, 用户S8确认): 单变量回退——dof_pos_limits −10 恢复
+            #（cut06B 机制归因：限位罚撤除→hr des 爆炸 p95 68.6/92.8°→yaw 耦合画圈 M9 −6.54/M8 48；梯度折叠与
+            # joint_symmetry 保留）；协议=两段（同 cut06），A 段宽域 5000 从零。
             ref_joint_pos = 2.2
-            feet_clearance = 1.
+            feet_clearance = 1.          # F1_cut02 加回（v5 原值 1.0；cut01 des 甩幅 2.5-3× 对症）
             feet_contact_number = 2.0
-            # gait
-            # 恢复 reward_v1 值 1.2（v7 归零教训：删正激励不治碎步，腾空反升 17.9→21.8%）；
-            # cycle 0.5 下单步 swing ≈0.25s，clamp 0.5s 天然弱化，节拍主导权仍在 contact_number
-            feet_air_time = 1.2
-            # 恢复 reward_v1 值 -1.0（env 内已同步线性化 + 40N 判据）
+            feet_air_time = 1.2          # F1_cut01 加回（v5 原值 1.2；cut00 duty 2.1% 节律崩对症；v7 先例）
             foot_slip = -1.0
-            feet_distance = 0.2
-            knee_distance = 0.2
-            # 左右镜像对称（hip_roll/hip_yaw/ankle_roll 非镜像分量）：治关 heading 后的持续偏航
-            joint_symmetry = 0.8
-            # contact 
-            feet_contact_forces = -0.01
-            # vel tracking
+            feet_distance = 0.           # v5: 0.2 → 0（D 构型细节组）
+            knee_distance = 0.           # v5: 0.2 → 0（D 组）
+            joint_symmetry = 0.8         # F1_cut06 回归（v5 原值 0.8；对称锚：cut05B M2 反弹+M9 −1.63°/s 对症）
+            feet_contact_forces = 0.     # v5: -0.01 → 0（C 微罚组）
             tracking_lin_vel = 1.8
             tracking_ang_vel = 1.1
-            vel_mismatch_exp = 0.5  # lin_z; ang x,y
-            low_speed = 0.2
-            track_vel_hard = 0.5
-            # base pos
-            default_joint_pos = 1.0
+            vel_mismatch_exp = 0.        # v5: 0.5（F1_cut03 提案加回被否决，未执行）
+            low_speed = 0.               # v5: 0.2（同上）
+            track_vel_hard = 0.          # v5: 0.5（同上）
+            default_joint_pos = 0.       # F1_cut04 置 0（cut01 加回后 M4 反升，非构型主效；必要性最弱候选）
             orientation = 1.
-            feet_rotation = 0.3
-            base_height = 0.2
-            base_acc = 0.2
-            # energy
-            action_smoothness = -0.002
-            torques = -8e-9
-            dof_vel = -2e-8
-            dof_acc = -1e-7
-            collision = -1.
+            feet_rotation = 0.           # v5: 0.3 → 0（D 组）
+            base_height = 0.             # v5: 0.2 → 0（D 组）
+            base_acc = 0.                # v5: 0.2 → 0（D 组）
+            action_smoothness = 0.       # v5: -0.002 → 0（C 组）
+            torques = 0.                 # v5: -8e-9 → 0（C 组）
+            dof_vel = 0.                 # v5: -2e-8 → 0（C 组）
+            dof_acc = 0.                 # v5: -1e-7 → 0（C 组）
+            collision = 0.               # F1_cut04 置 0（v5: −1；微安全罚，env 仍有 base_link 触地 termination 兜底）
             stand_still = 2.5
-            # limits
-            dof_vel_limits = -1
-            dof_pos_limits = -10.
-            dof_torque_limits = -0.1
+            dof_vel_limits = 0.          # v5: -1 → 0（机动位：安全组第 4 项）
+            dof_pos_limits = -10.        # F1_cut07 恢复（v5 原值；cut06B 撤除→hr des 爆炸 p95 92.8°→M9/M8 崩，单变量回退）
+            dof_torque_limits = 0.       # F1_cut04 置 0（v5: −0.1；微安全罚，量级最小）
 
     class normalization:
         class obs_scales:
@@ -442,7 +446,7 @@ class X1DHStandCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = 'ActorCriticDH'
         algorithm_class_name = 'DHPPO'
         num_steps_per_env = 24  # per iteration
-        max_iterations = 2501
+        max_iterations = 5000
           # number of policy updates
 
         # logging
