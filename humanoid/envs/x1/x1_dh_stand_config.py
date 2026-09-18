@@ -309,14 +309,14 @@ class X1DHStandCfg(LeggedRobotCfg):
                            "stand": [2,3],
                            "walk_omnidirectional": [4,6]}
 
-        heading_command = True  # F1_cut07 A段：宽域相位 heading=True（两段协议）；B段 resume 前改回 False
+        heading_command = False  # F1_cut07 B段：窄域相位 heading=False（两段协议收窄）；A段为 True
         # v5 续训兼容性说明：基座 v3b（model_5000.pt，heading=True 训练）obs 里的 cmd_wz 本来就是
         # 每步改写的角度纠偏 P 信号（clip(0.5×(heading_target−yaw), ±1)），与 yaw_hold 注入信号同族
         # → policy「服从 cmd_wz」能力直接迁移，续训仅需适应 gain 0.5→1.0/clip 收窄 + 转向段 raw 透传
         # v3 yaw_hold：wz 速率指令为主、近零段角度锚定的混合机制（治 v1 实测 +2.84°/s 漂移、v2 reward 版证伪）
         # |raw_wz|>门控0.15 时透传（转向语义不变）；近零段注入 clip(gain×wrap(anchor−yaw)) 借 tracking_ang_vel=1.1 闭环；
         # 转向→回中边沿 recenter anchor=当前 yaw（手柄语义：转完即新基准，无回拉）
-        yaw_hold = False  # F1_cut07 A段关闭（B段收窄相位恢复 True）
+        yaw_hold = True  # F1_cut07 B段恢复（窄域相位收窄锚）；A段为 False
         yaw_hold_gain = 1.0   # v4：0.5→1.0。v3 实测 gain=0.5 时 P 控制稳态平衡点 11°（纠偏力=固有漂移力所需 err），
                               # 增益翻倍平衡点减半至 ~5-6°，10s 累积可入 <10° 验收线；clip 不变故指令域不外扩
         yaw_hold_clip = 0.25  # 纠偏上限 rad/s（弱修正，避免与前向跟踪抢容量；正常转向指令量级）
@@ -324,8 +324,8 @@ class X1DHStandCfg(LeggedRobotCfg):
         sw_switch = True # use stand_com_threshold or not
 
         class ranges:
-            # F1_cut07 A段：v3b 宽域（两段协议）；B段 resume 前改回 [0.1, 0.4]
-            lin_vel_x = [-0.4, 1.2] # min max [m/s]
+            # F1_cut07 B段：窄域收窄（两段协议）；A段为 [-0.4, 1.2]
+            lin_vel_x = [0.1, 0.4] # min max [m/s]
             lin_vel_y = [-0.4, 0.4]   # min max [m/s]
             ang_vel_yaw = [-0.6, 0.6]    # min max [rad/s]
             heading = [-3.14, 3.14]
@@ -446,8 +446,8 @@ class X1DHStandCfgPPO(LeggedRobotCfgPPO):
         policy_class_name = 'ActorCriticDH'
         algorithm_class_name = 'DHPPO'
         num_steps_per_env = 24  # per iteration
-        max_iterations = 5000
-          # number of policy updates
+        max_iterations = 2501
+          # number of policy updates (B段 resume A段 checkpoint 2500 后再训 2501 轮)
 
         # logging
         save_interval = 100  # check for potential saves every this many iterations
