@@ -31,8 +31,17 @@
 # Copyright (c) 2024, AgiBot Inc. All rights reserved.
 
 
+import os
+
 from humanoid.envs import *
 from humanoid.utils import get_args, task_registry
+
+# GM 云端 clone 后会清理 logs/ 目录（git 跟踪也会被平台删）；resume 时 get_load_path
+# 需要 exported_data 目录存在且含至少一个子目录（runs[-1] 取最新 run），故运行时预建占位。
+# 仅在 GM 挂载环境（/workspace/x1-training）生效，本地/服务器训练不受影响。
+_GM_ROOT = '/workspace/x1-training'
+if os.path.isdir(_GM_ROOT):
+    os.makedirs(os.path.join(_GM_ROOT, 'logs', 'x1_dh_stand', 'exported_data', 'gm_placeholder'), exist_ok=True)
 
 def train(args):
     env, env_cfg = task_registry.make_env(name=args.task, args=args)
