@@ -183,14 +183,31 @@ class PPO:
                 if self.sync_update:
                     adaptation_loss = self.actor_critic.actor.compute_adaptation_pred_loss(metrics)
 
-                # symmetry loss 
-                actions_permutation = torch.tensor([-5, -6, 7, 8, 9, -0.001, -1, 2, 3, 4, -10, 15, -16, -17, 18, 11, -12, -13, 14])
-                observations_permutation = torch.tensor([-0.0001, 1, -2, 3, -4, 5,
-                                                        -11, -12, 13, 14, 15, -6, -7, 8, 9, 10, -16, 21, -22, -23, 24, 17, -18, -19, 20,
-                                                        -30, -31, 32, 33, 34, -25, 26, 27, 28, 29, -35, 40, -41, -42, 43, 36, -37, -38, 39,
-                                                        -49, -50, 51, 52, 53, -44, -45, 46, 47, 48, -54, 59, -60, -61, 62, 55, -56, -57, 58,
-                                                        63, -64, -65, 66, 67, 68, 69, 70, 71, -72, 73, 75, 74
+                # symmetry loss
+                # [OMA g1] 23-DOF G1 镜像置换表（design-hugwbc-g1-001 T2：
+                # dof 序=URDF 序 left hip_p/r/y,knee,ankle_p/r → right 同 → waist y/r/p → 臂；
+                # roll/yaw 换侧取负，pitch 换侧不变；waist_roll/yaw 自镜像取负，waist_pitch 自镜像不变）
+                if self.robot_type == 'g1':
+                    actions_permutation = torch.tensor([6, -7, -8, 9, 10, -11, 0, -1, -2, 3, 4, -5,
+                                                        -12, -13, 14, 19, -20, -21, 22, 15, -16, -17, 18])
+                    # obs: ang_vel(0-2) gravity(3-5) dof_pos(6-28) dof_vel(29-51) actions(52-74)
+                    #      cmd(75-85, 11 维含 interrupt_flag) clock(86-87 左右脚互换)
+                    observations_permutation = torch.tensor([
+                        -0.0001, 1, -2, 3, -4, 5,
+                        12, -13, -14, 15, 16, -17, 6, -7, -8, 9, 10, -11, -18, -19, 20, 25, -26, -27, 28, 21, -22, -23, 24,
+                        35, -36, -37, 38, 39, -40, 29, -30, -31, 32, 33, -34, -41, -42, 43, 48, -49, -50, 51, 44, -45, -46, 47,
+                        58, -59, -60, 61, 62, -63, 52, -53, -54, 55, 56, -57, -64, -65, 66, 71, -72, -73, 74, 67, -68, -69, 70,
+                        75, -76, -77, 78, 79, 80, 81, 82, 83, -84, 85,
+                        87, 86
                                                         ])
+                else:
+                    actions_permutation = torch.tensor([-5, -6, 7, 8, 9, -0.001, -1, 2, 3, 4, -10, 15, -16, -17, 18, 11, -12, -13, 14])
+                    observations_permutation = torch.tensor([-0.0001, 1, -2, 3, -4, 5,
+                                                            -11, -12, 13, 14, 15, -6, -7, 8, 9, 10, -16, 21, -22, -23, 24, 17, -18, -19, 20,
+                                                            -30, -31, 32, 33, 34, -25, 26, 27, 28, 29, -35, 40, -41, -42, 43, 36, -37, -38, 39,
+                                                            -49, -50, 51, 52, 53, -44, -45, 46, 47, 48, -54, 59, -60, -61, 62, 55, -56, -57, 58,
+                                                            63, -64, -65, 66, 67, 68, 69, 70, 71, -72, 73, 75, 74
+                                                            ])
                     
                 act_perm_mat = torch.zeros(len(actions_permutation), len(actions_permutation), requires_grad=False, device=self.device)
                 obs_perm_mat = torch.zeros(len(observations_permutation), len(observations_permutation), requires_grad=False, device=self.device)
