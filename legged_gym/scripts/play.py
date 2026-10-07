@@ -1,6 +1,7 @@
 import os
 import sys
-sys.path.append(os.getcwd())
+# [OMA g1] 同 train.py：按脚本位置回溯两级到 x1-training/（GM gm-run 的 cwd 不在仓库根）
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from legged_gym import LEGGED_GYM_ROOT_DIR
 import isaacgym
 from legged_gym.envs import *

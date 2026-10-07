@@ -2,8 +2,8 @@ import numpy as np
 import os
 from datetime import datetime
 import sys
-# [OMA g1] GM 平台 gm-run 的 cwd 不在仓库根——按脚本位置回溯（x1-training/legged_gym/scripts/ → 上三级）
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+# [OMA g1] GM gm-run 的 cwd 不在仓库根——按脚本位置回溯两级（…/x1-training/legged_gym/scripts/ → x1-training/，含 legged_gym 与 rsl_rl 包）
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 import isaacgym
 from legged_gym.envs import *
