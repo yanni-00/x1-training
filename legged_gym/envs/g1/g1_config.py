@@ -9,7 +9,11 @@ PROPRIOCEPTION_DIM = 69  # 23 dof × (pos+vel) + 12 dof_pos + 23 actions = 46+23
 PROPRIOCEPTION_DIM = 75
 CMD_DIM = 3 + 4 + 1 + 2
 TERRAIN_DIM = 221
-PRIVILEGED_DIM = 3 + 1 + 2 + 1 + 6 + 11
+# 特权段=运行时装配口径（TASK_050 实测 obs_buf=335 反推）：
+#   3(lin_vel)+1(h_error)+2(foot_clearance)+1(friction)+6(feet contact×2脚)+13(collision_states)
+#   13 = penalize_contacts_on 命中的 G1 URDF 刚体数：elbow2+torso1+hip6+knee2+waist3，
+#   其中 waist_support_link 为 fixed 关节（waist_support_joint）被 Isaac Gym 合并 → 14-1=13
+PRIVILEGED_DIM = 3 + 1 + 2 + 1 + 6 + 13
 CLOCK_INPUT = 2
 
 class G1Cfg( H1Cfg ):
