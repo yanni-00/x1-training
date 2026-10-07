@@ -1,6 +1,6 @@
 from legged_gym.envs.h1.h1interrupt import H1InterruptRobot
 from legged_gym.envs.g1.g1 import G1Robot
-from legged_gym.envs.g1.g1_config import G1InterruptCfg
+from legged_gym.envs.g1.g1interrupt_config import G1InterruptCfg
 
 
 class G1InterruptRobot(G1Robot, H1InterruptRobot):
