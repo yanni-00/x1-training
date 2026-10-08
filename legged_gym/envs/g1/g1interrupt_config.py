@@ -117,7 +117,7 @@ class G1InterruptCfgPPO( G1CfgPPO ):
         resume = False
         resume_path = None
         max_iterations = 40000
-        save_interval = 2000
+        save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 
     class policy( G1CfgPPO.policy ):
         model_name = "MlpAdaptModel"
