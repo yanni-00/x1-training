@@ -114,8 +114,12 @@ class G1InterruptCfg( G1Cfg ):
 class G1InterruptCfgPPO( G1CfgPPO ):
     class runner( G1CfgPPO.runner ):
         experiment_name = "g1_interrupt"
-        resume = False
-        resume_path = None
+        # r7 续训（exp-20260928-007）：从 TASK_20261008_091 的 model_400 断点恢复（余额杀任务，400/600）
+        # 路径锚定 config 文件位置（GM gm-run cwd 不可依赖）——与 train.py sys.path 同一教训
+        import os as _os
+        resume = True
+        resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                                 '..', '..', '..', 'resources', 'checkpoints', 'model_400_g1int.pt'))
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 
