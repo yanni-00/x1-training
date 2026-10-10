@@ -58,6 +58,11 @@ class G1InterruptCfg( G1Cfg ):
             # penalize standing
             standing_air = -2
 
+            # [lap2 die-fast 机制检验] H1原值0.2×dt=0.004/步 vs 死亡-4：活满20s差价仅+0.8, 无生存梯度
+            # (exp-007实测: episode长度塌缩钉死1.0)。提10倍造"多活"梯度, 副作用=站着不动刷alive——
+            # 由curriculum内的stand_still(-10)/standing_air(-2)罚随课程推进压制, 预注册签名见decision_log
+            alive = 2.0
+
     class commands( G1Cfg.commands ):
         num_commands = CMD_DIM
 
@@ -114,12 +119,9 @@ class G1InterruptCfg( G1Cfg ):
 class G1InterruptCfgPPO( G1CfgPPO ):
     class runner( G1CfgPPO.runner ):
         experiment_name = "g1_interrupt"
-        # r7 续训（exp-20260928-007）：从 TASK_20261008_091 的 model_400 断点恢复（余额杀任务，400/600）
-        # 路径锚定 config 文件位置（GM gm-run cwd 不可依赖）——与 train.py sys.path 同一教训
-        import os as _os
-        resume = True
-        resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                 '..', '..', '..', 'resources', 'checkpoints', 'model_400_g1int.pt'))
+        # lap2 为新奖励经济学下的从头训练（die-fast 权重不可复用），r7 的 resume 配置已复位
+        resume = False
+        resume_path = None
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 
