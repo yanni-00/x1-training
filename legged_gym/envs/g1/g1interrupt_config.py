@@ -66,6 +66,23 @@ class G1InterruptCfg( G1Cfg ):
     class commands( G1Cfg.commands ):
         num_commands = CMD_DIM
 
+    # [lap3 T4变量1] PD 档消融：H1 值折算 ×0.5（H1: hip200/knee300/ankle40/torso300/arm20, damping 5/6/2/6/0.5）
+    # 对照 ASAP 档（G1Cfg 继承）。关键差：ankle damping 0.2/0.1→1.0（ASAP 桨状踝是平衡嫌疑），
+    # waist 400→150, knee 200→150, arm 90/60/20→10。stiffness+damping 整表换（design T4 预注册的功能单元组）
+    class control( G1Cfg.control ):
+        stiffness = {'hip_pitch': 100, 'hip_roll': 100, 'hip_yaw': 100,
+                     'knee': 150,
+                     'ankle_pitch': 20, 'ankle_roll': 20,
+                     'waist_yaw': 150, 'waist_roll': 150, 'waist_pitch': 150,
+                     'shoulder_pitch': 10, 'shoulder_roll': 10, 'shoulder_yaw': 10, 'elbow': 10,
+                     }
+        damping = {  'hip_pitch': 2.5, 'hip_roll': 2.5, 'hip_yaw': 2.5,
+                    'knee': 3,
+                    'ankle_pitch': 1, 'ankle_roll': 1,
+                    'waist_yaw': 3, 'waist_roll': 3, 'waist_pitch': 3,
+                    'shoulder_pitch': 0.25, 'shoulder_roll': 0.25, 'shoulder_yaw': 0.25, 'elbow': 0.25,
+                    }
+
     class disturb:
         max_curriculum = 1.0
         use_disturb = True
