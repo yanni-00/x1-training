@@ -30,7 +30,7 @@ def eval_cmd(args):
     ppo_runner.load(CHECKPOINT)
     policy = ppo_runner.get_inference_policy(device=ppo_runner.device)
 
-    obs, critic_obs, _, _, _ = env.reset()
+    obs, critic_obs = env.reset()  # reset 返回 2 元组（step 才是 5 元组）
     ep_l1_sum = torch.zeros(EVAL_NUM_ENVS, device=env.device)
     ep_steps = torch.zeros(EVAL_NUM_ENVS, device=env.device)
     done_episodes = 0
