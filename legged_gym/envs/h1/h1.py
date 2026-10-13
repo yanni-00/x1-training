@@ -1529,7 +1529,7 @@ class H1Robot(BaseTask):
         return 1*double_contact
     
     def _reward_standing_joint_deviation(self):
-        penalize_joint_index = torch.tensor([11, 12, 13, 14, 15, 16, 17, 18], dtype=torch.int, device=self.device)
+        penalize_joint_index = torch.tensor([11, 12, 13, 14, 15, 16, 17, 18], dtype=torch.long, device=self.device)
         reward = torch.square(self.dof_pos - self.default_dof_pos)[:, penalize_joint_index]
         reward[~self.standing_envs_mask] = 0
         return torch.sum(reward, dim=-1)
