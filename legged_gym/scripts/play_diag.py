@@ -12,9 +12,9 @@ import torch
 # play 诊断轮（卡§1 行为证据补充）：单 env + 固定 vx=0.5 命令，打时间序列 CSV
 # ——E_cmd 数字之外，看"实际速度曲线 vs 命令"的动态（跟踪滞后/幅度衰减/方向丢失）
 CHECKPOINT = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'checkpoints', 'model_4500_g1int.pt'))
+                              '..', '..', 'resources', 'checkpoints', 'model_1800_g1int.pt'))
 OUT_CSV = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'play_diag_4500.csv'))
+                              '..', '..', 'resources', 'play_diag_1800.csv'))
 CMD_VX = 0.5
 EPISODE_STEPS = 1000
 
