@@ -52,7 +52,10 @@ class G1InterruptCfg( G1Cfg ):
             action_rate_upper = -0.01
             base_height = -40.0
             stand_still = -10.0
-            standing = 2.0
+            # [lap7 站立经济学修正] H1原值2.0: 站立env收益+5.9/s > 完美行走+4.0/s(逐项核算见decision_log exp-013)
+            # = "站比走赚"的结构性陷阱(exp-007/012 play实证: 走得动但不走)。置零让运动env相对收益反转。
+            # 站立env地板仍在: alive 2.0/s + 零命令白送tracking; stand_still课程罚继续压制死站
+            standing = 0.0
             orientation_control = -10
 
             # penalize standing
