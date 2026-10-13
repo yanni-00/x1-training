@@ -28,9 +28,9 @@ def eval_cmd(args):
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args)
     print("load_path:", CHECKPOINT)
     ppo_runner.load(CHECKPOINT)
-    policy = ppo_runner.get_inference_policy(device=ppo_runner.device)
 
     obs, critic_obs = env.reset()  # reset 返回 2 元组（step 才是 5 元组）
+    actor_critic = ppo_runner.get_inference_policy(device=ppo_runner.device)
     ep_l1_sum = torch.zeros(EVAL_NUM_ENVS, device=env.device)
     ep_steps = torch.zeros(EVAL_NUM_ENVS, device=env.device)
     done_episodes = 0
@@ -42,8 +42,8 @@ def eval_cmd(args):
 
     while done_episodes < NUM_EVAL_EPISODES:
         with torch.no_grad():
-            actions = policy(obs)
-        obs, _, _, dones, infos = env.step(actions)
+            actions, _ = actor_critic.act_inference(obs, privileged_obs=critic_obs)
+        obs, critic_obs, _, dones, infos = env.step(actions)
 
         # E_cmd: 命令空间前 3 维（vx, vy, ω）对实际基座速度的 L1
         cmd_vel = env.commands[:, :3]
