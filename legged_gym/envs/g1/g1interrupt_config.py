@@ -139,12 +139,13 @@ class G1InterruptCfg( G1Cfg ):
 class G1InterruptCfgPPO( G1CfgPPO ):
     class runner( G1CfgPPO.runner ):
         experiment_name = "g1_interrupt"
-        # lap6 加训轮（exp-20261012-012）：从 model_1500 续训 +3000 → 总 4500 iter，目标收紧 E_cmd
-        # 注：model_1500 为循环结束后的终存档（runner 循环后 current+=num 才存），iter 字段=1500 正确
+        # lap8 探索谷爬坡轮（exp-20261014-001）：从 model_1800 续训 +3000 → 总 4800 iter，零参数改动
+        # 本轮 resume 为有意设置（预注册声明），区别于 lap7 的 resume 残留事故（登记 fresh 实跑 resume）
+        # 注：model 存档时 runner 循环后 current+=num 才存，iter 字段 = 终点 iter（1800 正确）
         import os as _os
         resume = True
         resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                 '..', '..', '..', 'resources', 'checkpoints', 'model_1500_g1int.pt'))
+                                 '..', '..', '..', 'resources', 'checkpoints', 'model_1800_g1int.pt'))
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 
