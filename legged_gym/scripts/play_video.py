@@ -19,10 +19,10 @@ import torch
 # camera sensor 离屏渲染在本 headless 服务器实测返回空帧 0x0，viewer 路径已验证可用）。
 # 用法：xvfb-run -a python play_video.py --task=g1int
 CHECKPOINT = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'checkpoints', 'model_4800_g1int.pt'))
+                              '..', '..', 'resources', 'checkpoints', 'model_9800_g1int.pt'))
 OUT_MP4 = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                            '..', '..', 'resources', 'play_video_4800.mp4'))
-FRAME_DIR = '/tmp/play_video_frames_4800'
+                            '..', '..', 'resources', 'play_video_9800.mp4'))
+FRAME_DIR = '/tmp/play_video_frames_9800'
 CMD_VX = 0.5
 EPISODE_STEPS = 1000
 FRAME_EVERY = 2          # 50Hz sim → 25fps 视频
