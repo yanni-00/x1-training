@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import shutil
 import subprocess
 import sys
 # [OMA g1] 同 train.py：按脚本位置回溯两级到 x1-training/
@@ -14,21 +15,25 @@ import torch
 # play 视频轮（play 三纪律：必须同步产 mp4，下判定前先看行为形态）
 # 评估条件与 play_diag.py 完全一致（单 env + cmd_vx=0.5 冻结 + 关噪声/DR），
 # 视频即 play_diag CSV 的可视化佐证——CSV 数字与视频行为必须对得上。
-# 录制方式：camera sensor 离屏渲染（无需 viewer/Xvfb），原始 RGBA 帧落盘，ffmpeg 合成 mp4。
+# 录制方式：viewer 帧抓取（须 xvfb-run -a 运行、不加 --headless；
+# camera sensor 离屏渲染在本 headless 服务器实测返回空帧 0x0，viewer 路径已验证可用）。
+# 用法：xvfb-run -a python play_video.py --task=g1int
 CHECKPOINT = os.path.abspath(os.path.join(os.path.dirname(__file__),
                               '..', '..', 'resources', 'checkpoints', 'model_4800_g1int.pt'))
 OUT_MP4 = os.path.abspath(os.path.join(os.path.dirname(__file__),
                             '..', '..', 'resources', 'play_video_4800.mp4'))
-FRAMES_RAW = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                             '..', '..', 'resources', 'play_video_4800.raw'))
+FRAME_DIR = '/tmp/play_video_frames_4800'
 CMD_VX = 0.5
 EPISODE_STEPS = 1000
 FRAME_EVERY = 2          # 50Hz sim → 25fps 视频
-CAM_W, CAM_H = 640, 480
 FFMPEG = 'ffmpeg'
 
 
 def play_video(args):
+    if args.headless:
+        print("REFUSING: --headless gives empty camera frames on this server; "
+              "run under xvfb-run without --headless")
+        return
     env_cfg, _ = task_registry.get_cfgs(name=args.task)
     # 与 play_diag 完全一致的评估条件
     env_cfg.env.num_envs = 1
@@ -61,68 +66,55 @@ def play_video(args):
         env=env, name=args.task, args=args, train_cfg=train_cfg)
     actor_critic = ppo_runner.get_inference_policy(device=env.device)
     print("load_path:", CHECKPOINT)
+    assert env.viewer is not None, "viewer 未创建（需要 xvfb-run 且不加 --headless）"
 
-    # 离屏相机：环绕跟随机器人（20s 仿真一整圈）
-    cam_props = gymapi.CameraProperties()
-    cam_props.width = CAM_W
-    cam_props.height = CAM_H
-    camera = env.gym.create_camera_sensor(env.envs[0], cam_props)
+    if os.path.isdir(FRAME_DIR):
+        shutil.rmtree(FRAME_DIR)
+    os.makedirs(FRAME_DIR)
 
-    obs, critic_obs = env.reset()
-    if os.path.exists(FRAMES_RAW):
-        os.remove(FRAMES_RAW)
+    vx_log = []
     n_frames = 0
-    black_frames = 0
-    with open(FRAMES_RAW, 'wb') as fraw:
-        for t in range(EPISODE_STEPS):
-            with torch.inference_mode():
-                actions, _ = actor_critic.act_inference(obs, privileged_obs=critic_obs)
-            obs, critic_obs, _, dones, infos = env.step(actions)
-            env.commands[:, 0] = CMD_VX
-            env.commands[:, 1] = 0.0
-            env.commands[:, 2] = 0.0
+    obs, critic_obs = env.reset()
+    for t in range(EPISODE_STEPS):
+        with torch.inference_mode():
+            actions, _ = actor_critic.act_inference(obs, privileged_obs=critic_obs)
+        obs, critic_obs, _, dones, infos = env.step(actions)
+        env.commands[:, 0] = CMD_VX
+        env.commands[:, 1] = 0.0
+        env.commands[:, 2] = 0.0
+        vx_log.append(env.base_lin_vel[0, 0].item())
 
-            if t % FRAME_EVERY == 0:
-                theta = 2 * np.pi * t / EPISODE_STEPS
-                look_at = np.array(env.root_states[0, :3].cpu(), dtype=np.float64)
-                cam_pos = look_at + 2.0 * np.array(
-                    [np.cos(theta), np.sin(theta), 0.3])
-                env.gym.set_camera_location(
-                    camera, env.envs[0],
-                    gymapi.Vec3(*cam_pos), gymapi.Vec3(*look_at))
-                env.gym.render_all_camera_sensors(env.envs[0])
-                img = env.gym.get_camera_image(
-                    env.envs[0], camera, gymapi.IMAGE_COLOR)
-                img = np.asarray(img)
-                if img.ndim == 1:
-                    img = img.reshape(CAM_H, CAM_W, -1)
-                img = np.ascontiguousarray(img[..., :4])
-                if img.dtype != np.uint8:
-                    img = img.astype(np.uint8)
-                if img.max() == 0:
-                    black_frames += 1
-                fraw.write(img.tobytes())
-                n_frames += 1
+        # 环绕相机（与 play.py 同款：跟随机器人旋转一整圈）
+        theta = 2 * np.pi * t / EPISODE_STEPS
+        look_at = np.array(env.root_states[0, :3].cpu(), dtype=np.float64)
+        cam_pos = look_at + 2.0 * np.array([np.cos(theta), np.sin(theta), 0.3])
+        env.gym.viewer_camera_look_at(
+            env.viewer, env.envs[0],
+            gymapi.Vec3(*cam_pos), gymapi.Vec3(*look_at))
+        if t % FRAME_EVERY == 0:
+            env.gym.write_viewer_image_to_file(
+                env.viewer, os.path.join(FRAME_DIR, f'f_{n_frames:04d}.png'))
+            n_frames += 1
 
-            if dones[0] and not env.time_out_buf[0]:
-                print(f"TERMINATED at step {t} (non-timeout)")
-                break
+        if dones[0] and not env.time_out_buf[0]:
+            print(f"TERMINATED at step {t} (non-timeout)")
+            break
 
-    # ffmpeg: RGBA raw → h264 mp4
+    # ffmpeg: PNG 序列 → h264 mp4
     rc = subprocess.call([
         FFMPEG, '-y', '-loglevel', 'error',
-        '-f', 'rawvideo', '-pix_fmt', 'rgba',
-        '-s', f'{CAM_W}x{CAM_H}', '-r', str(int(50 / FRAME_EVERY)),
-        '-i', FRAMES_RAW, '-pix_fmt', 'yuv420p', OUT_MP4])
+        '-framerate', str(int(50 / FRAME_EVERY)),
+        '-i', os.path.join(FRAME_DIR, 'f_%04d.png'),
+        '-pix_fmt', 'yuv420p', '-crf', '23', OUT_MP4])
     if rc == 0:
-        os.remove(FRAMES_RAW)
+        shutil.rmtree(FRAME_DIR)
+    vx = np.array(vx_log)
+    steady = vx[200:]
     print("=" * 60)
-    print(f"PLAY VIDEO  cmd_vx={CMD_VX}  frames={n_frames}  "
-          f"black_frames={black_frames}  ffmpeg_rc={rc}")
+    print(f"PLAY VIDEO  cmd_vx={CMD_VX}  frames={n_frames}  ffmpeg_rc={rc}")
+    print(f"vel_x: mean(steady>4s)={steady.mean():.3f}  std={steady.std():.3f} "
+          f"(对齐 play_diag 口径)")
     print(f"MP4 -> {OUT_MP4}")
-    if black_frames > n_frames * 0.2:
-        print("WARN: >20% frames black — offscreen render issue, "
-              "check EGL/driver before judging from this video")
     print("=" * 60)
 
 

@@ -69,7 +69,7 @@ def eval_cmd(args):
     steps_arr = np.array(steps_list)
     cmd_arr = np.array(cmd_log)
     print("=" * 60)
-    print(f"EVAL SUMMARY  episodes={done_episodes}  checkpoint=model_4500")
+    print(f"EVAL SUMMARY  episodes={done_episodes}  checkpoint={os.path.basename(CHECKPOINT)}")
     print(f"E_cmd (mean L1, cmd vs actual) : {l1_arr.mean():.4f}  (std {l1_arr.std():.4f})")
     print(f"  per-component cmd ranges: vx [{cmd_arr[:,0].min():.2f},{cmd_arr[:,0].max():.2f}]"
           f"  vy [{cmd_arr[:,1].min():.2f},{cmd_arr[:,1].max():.2f}]"
