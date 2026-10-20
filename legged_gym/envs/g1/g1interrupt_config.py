@@ -56,7 +56,13 @@ class G1InterruptCfg( G1Cfg ):
             # = "站比走赚"的结构性陷阱(exp-007/012 play实证: 走得动但不走)。置零让运动env相对收益反转。
             # 站立env地板仍在: alive 2.0/s + 零命令白送tracking; stand_still课程罚继续压制死站
             standing = 0.0
-            orientation_control = -10
+            # [lap10 姿态优先轮 exp-20261020-002] owner裁决姿态第一速度第二:
+            # lap9实测前倾-15.2°/右臂夹腿/E_cmd 0.7758; S1核算姿态罚(0.2/ep) vs tracking收益(3.6/ep)=1:18,
+            # 姿态在reward经济学里几乎免费 → ×10拉到同量级(~2/ep)
+            orientation_control = -100
+            # [lap10] shoulder_deviation -1→-8: 右臂夹腿(lap9新增缺陷, 4800版双臂自然)。
+            # 该罚=2*sum(shoulder²)+0.25*sum(elbow²), 提档使其单关节1rad偏差~1.6/ep可见
+            shoulder_deviation = -8
 
             # penalize standing
             standing_air = -2
@@ -66,8 +72,19 @@ class G1InterruptCfg( G1Cfg ):
             # 由curriculum内的stand_still(-10)/standing_air(-2)罚随课程推进压制, 预注册签名见decision_log
             alive = 2.0
 
+            # [lap10 姿态优先] 速度让位: owner明示"速度跟踪要求可适度降低"
+            tracking_lin_vel = 1.0
+
+        # [lap10] H1遗留修正: 0.98m是H1体型目标, G1 URDF直腿链0.598m、实测站直0.69-0.73m。
+        # 永远够不到的目标=恒定满额罚, 无整形力。0.72=实测带中值
+        base_height_target = 0.72
+
     class commands( G1Cfg.commands ):
         num_commands = CMD_DIM
+        # [lap10 姿态优先] body_pitch 命令分布：H1 遗留 [0.0,0.4]rad = 期望前倾 0~22.9°，
+        # 从不要求直立。owner 需求"直着腰走路" → 分布重心移到 0 附近（±0.1rad = ±5.7°）
+        class ranges( G1Cfg.commands.ranges ):
+            body_pitch = [-0.1, 0.1]
 
     # [lap3 T4变量1] PD 档消融：H1 值折算 ×0.5（H1: hip200/knee300/ankle40/torso300/arm20, damping 5/6/2/6/0.5）
     # 对照 ASAP 档（G1Cfg 继承）。关键差：ankle damping 0.2/0.1→1.0（ASAP 桨状踝是平衡嫌疑），
@@ -139,15 +156,13 @@ class G1InterruptCfg( G1Cfg ):
 class G1InterruptCfgPPO( G1CfgPPO ):
     class runner( G1CfgPPO.runner ):
         experiment_name = "g1_interrupt"
-        # lap9 加训爬坡轮（exp-20261019-001）：从 model_4800 续训 +5000 → 总 9800 iter，零改动
-        # lap8 verdict: 命中(边界), vel_x 0.257(51% of 0.5), 段内仍在爬(0.215→0.277), reward无平台
-        # → 梯度仍在, 本轮无resume shock(同checkpoint连续续训), 5000更可能穿过平台期
-        # r15(TASK_20261019_080) 于 6050 iter 被外部终止(疑账号额度耗尽, 3MB日志零训练错误)——
-        # r16 从 model_6050 续训 +3750 → 总 9800, 参数仍零改动
+        # lap10 姿态优先轮（exp-20261020-002, owner裁决姿态第一速度第二）：
+        # orientation_control ×10 + shoulder_deviation ×8 + base_height_target 0.98→0.72
+        # + body_pitch分布[0,0.4]→[-0.1,0.1] + tracking_lin_vel 2.0→1.0；resume model_8550 +3000 → 总 12800
         import os as _os
         resume = True
         resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                 '..', '..', '..', 'resources', 'checkpoints', 'model_6050_g1int.pt'))
+                                 '..', '..', '..', 'resources', 'checkpoints', 'model_8550_g1int.pt'))
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 
