@@ -11,12 +11,11 @@ import torch
 
 # play 诊断轮（卡§1 行为证据补充）：单 env + 固定 vx=0.5 命令，打时间序列 CSV
 # ——E_cmd 数字之外，看"实际速度曲线 vs 命令"的动态（跟踪滞后/幅度衰减/方向丢失）
-# model_8550 权重 lineage: 4800(lap8)+1250(r15)+3750(r16)=9800 iter 训练量;
-# 标签 8550 因 r15 中途死(6050 mid-loop save 的 iter 字段残留 r15 起点 4800)→r16 计数从 4800 起
+# model_11550 权重 lineage: 8550(lap9)+3000(lap10 posture-first)=11550-iter 训练量
 CHECKPOINT = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'checkpoints', 'model_8550_g1int.pt'))
+                              '..', '..', 'resources', 'checkpoints', 'model_11550_g1int.pt'))
 OUT_CSV = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'play_diag_8550.csv'))
+                              '..', '..', 'resources', 'play_diag_11550.csv'))
 CMD_VX = 0.5
 EPISODE_STEPS = 1000
 
