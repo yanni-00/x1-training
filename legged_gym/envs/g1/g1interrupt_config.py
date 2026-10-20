@@ -142,10 +142,12 @@ class G1InterruptCfgPPO( G1CfgPPO ):
         # lap9 加训爬坡轮（exp-20261019-001）：从 model_4800 续训 +5000 → 总 9800 iter，零改动
         # lap8 verdict: 命中(边界), vel_x 0.257(51% of 0.5), 段内仍在爬(0.215→0.277), reward无平台
         # → 梯度仍在, 本轮无resume shock(同checkpoint连续续训), 5000更可能穿过平台期
+        # r15(TASK_20261019_080) 于 6050 iter 被外部终止(疑账号额度耗尽, 3MB日志零训练错误)——
+        # r16 从 model_6050 续训 +3750 → 总 9800, 参数仍零改动
         import os as _os
         resume = True
         resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                 '..', '..', '..', 'resources', 'checkpoints', 'model_4800_g1int.pt'))
+                                 '..', '..', '..', 'resources', 'checkpoints', 'model_6050_g1int.pt'))
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 
