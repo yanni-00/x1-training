@@ -30,3 +30,11 @@ class G1Robot(H1Robot):
         waist_commands = self.commands[:, 9]
         reward = torch.square(self.dof_pos[:, self.waist_roll_inds] - waist_commands.unsqueeze(-1))
         return reward.sum(dim=-1)
+
+    def _reward_torso_deviation(self):
+        # [lap11 exp-20261021-001] 腰3关节(yaw/roll/pitch)偏离 default_dof_pos 的平方和。
+        # 背景: torso_deviation 在 reward_curriculum_list 挂名但全库无实现(死条目);
+        # orientation_control 只测骨盆 projected_gravity, 看不见腰折(model_11550 实测:
+        # 骨盆近垂直但 waist_pitch +29.8°/yaw +45.8°)。default 腰=0 即直腰目标。
+        dev = self.dof_pos[:, self.torso_inds] - self.default_dof_pos[:, self.torso_inds]
+        return torch.sum(torch.square(dev), dim=-1)

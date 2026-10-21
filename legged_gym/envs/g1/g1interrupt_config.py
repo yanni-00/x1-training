@@ -50,7 +50,9 @@ class G1InterruptCfg( G1Cfg ):
             action_rate = 0
             action_rate_lower = -0.01
             action_rate_upper = -0.01
-            base_height = -40.0
+            # [lap11 exp-20261021-001] -40→-60: model_11550 实测蹲至0.484m(target 0.72),
+            # 蹲深0.236m时 raw=0.0557, -40下cost 2.2 低于低重心的稳定收益 → 提档至3.3
+            base_height = -60.0
             stand_still = -10.0
             # [lap7 站立经济学修正] H1原值2.0: 站立env收益+5.9/s > 完美行走+4.0/s(逐项核算见decision_log exp-013)
             # = "站比走赚"的结构性陷阱(exp-007/012 play实证: 走得动但不走)。置零让运动env相对收益反转。
@@ -74,6 +76,13 @@ class G1InterruptCfg( G1Cfg ):
 
             # [lap10 姿态优先] 速度让位: owner明示"速度跟踪要求可适度降低"
             tracking_lin_vel = 1.0
+
+            # [lap11 exp-20261021-001] 腰弯直修: g1.py 新增 _reward_torso_deviation 实装
+            # (此前 torso_deviation 在 curriculum 列表挂名但全库无实现=死条目)。
+            # model_11550 实测: 骨盆垂直但 waist_pitch+29.8°/yaw+45.8°/roll+29.8°,
+            # 腰dev²=1.18 rad²。scale=-5 → cost≈5.9, 与 lap10 orientation×10 拉平骨盆
+            # 15.2°→2° 的杠杆同级。直腰时 raw≈0 零成本, 只罚弯。
+            torso_deviation = -5.0
 
         # [lap10] H1遗留修正: 0.98m是H1体型目标, G1 URDF直腿链0.598m、实测站直0.69-0.73m。
         # 永远够不到的目标=恒定满额罚, 无整形力。0.72=实测带中值
@@ -156,13 +165,15 @@ class G1InterruptCfg( G1Cfg ):
 class G1InterruptCfgPPO( G1CfgPPO ):
     class runner( G1CfgPPO.runner ):
         experiment_name = "g1_interrupt"
+        # lap11 腰弯直修（exp-20261021-001）: torso_deviation 实装(-5) + base_height -60,
+        # resume model_11550 +3000 → 总 14550。
         # lap10 姿态优先轮（exp-20261020-002, owner裁决姿态第一速度第二）：
         # orientation_control ×10 + shoulder_deviation ×8 + base_height_target 0.98→0.72
         # + body_pitch分布[0,0.4]→[-0.1,0.1] + tracking_lin_vel 2.0→1.0；resume model_8550 +3000 → 总 12800
         import os as _os
         resume = True
         resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                 '..', '..', '..', 'resources', 'checkpoints', 'model_8550_g1int.pt'))
+                                 '..', '..', '..', 'resources', 'checkpoints', 'model_11550_g1int.pt'))
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 

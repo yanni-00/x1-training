@@ -12,7 +12,7 @@ import torch
 # 卡 §1 论文口径首轮评估：E_cmd（episodic 平均命令跟踪误差，L1）+ 非终止轨迹比
 # checkpoint 路径锚定脚本位置（与 train.py sys.path 同一教训）
 CHECKPOINT = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'checkpoints', 'model_11550_g1int.pt'))
+                              '..', '..', 'resources', 'checkpoints', 'model_14550_g1int.pt'))
 NUM_EVAL_EPISODES = 200
 EVAL_NUM_ENVS = 64
 
