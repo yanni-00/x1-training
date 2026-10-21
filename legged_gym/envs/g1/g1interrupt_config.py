@@ -50,9 +50,11 @@ class G1InterruptCfg( G1Cfg ):
             action_rate = 0
             action_rate_lower = -0.01
             action_rate_upper = -0.01
-            # [lap11 exp-20261021-001] -40→-60: model_11550 实测蹲至0.484m(target 0.72),
-            # 蹲深0.236m时 raw=0.0557, -40下cost 2.2 低于低重心的稳定收益 → 提档至3.3
-            base_height = -60.0
+            # [lap11b exp-20261021-001] -40→-60→回撤-40: r18 实测 -60 与直腰罚叠加
+            # 使活着总账跌破死亡线(-4.23), 触发 step-1 死亡均衡(ep_len 736→1)。
+            # 预注册失败分支(c)执行: 单变量回撤, 站高由 torso 直腰的联动自然恢复
+            # (直腰后躯干质心上移, 深蹲与直腰不相容), 不足再单独提档
+            base_height = -40.0
             stand_still = -10.0
             # [lap7 站立经济学修正] H1原值2.0: 站立env收益+5.9/s > 完美行走+4.0/s(逐项核算见decision_log exp-013)
             # = "站比走赚"的结构性陷阱(exp-007/012 play实证: 走得动但不走)。置零让运动env相对收益反转。
@@ -165,15 +167,15 @@ class G1InterruptCfg( G1Cfg ):
 class G1InterruptCfgPPO( G1CfgPPO ):
     class runner( G1CfgPPO.runner ):
         experiment_name = "g1_interrupt"
-        # lap11 腰弯直修（exp-20261021-001）: torso_deviation 实装(-5) + base_height -60,
-        # resume model_11550 +3000 → 总 14550。
+        # lap11b（exp-20261021-001 续）: termination -200→-1500(h1_config), base_height 回撤 -40,
+        # torso_deviation -5 保持; resume model_12000(r18 健康块末端, waist_yaw 45.8→21.8°)+3000 → 15000。
         # lap10 姿态优先轮（exp-20261020-002, owner裁决姿态第一速度第二）：
         # orientation_control ×10 + shoulder_deviation ×8 + base_height_target 0.98→0.72
         # + body_pitch分布[0,0.4]→[-0.1,0.1] + tracking_lin_vel 2.0→1.0；resume model_8550 +3000 → 总 12800
         import os as _os
         resume = True
         resume_path = _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
-                                 '..', '..', '..', 'resources', 'checkpoints', 'model_11550_g1int.pt'))
+                                 '..', '..', '..', 'resources', 'checkpoints', 'model_12000_g1int.pt'))
         max_iterations = 40000
         save_interval = 50  # H1镜像为2000；TASK_051实测90min外部终止无checkpoint可续——降为50(≈49min/个)保断点续训
 

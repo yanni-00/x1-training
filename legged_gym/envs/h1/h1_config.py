@@ -205,7 +205,12 @@ class H1Cfg( LeggedRobotCfg ):
             elbow_deviation = -0
             joint_power_distribution = -0.5
             no_fly = 0.25
-            termination = -200
+            # [lap11b exp-20261021-001] -200→-1500: r18 实测死亡均衡——
+            # 死亡总账-4.23 > 活着最差总账~-10(r17基线-7.72+新罚), 策略滑入
+            # step-1 terminate 吸引子(ep_len 736→1, 860→12400 iter 全程)。
+            # termination 提到任何活法总账之上封死吸引子。
+            # only_positive_rewards=False(本fork:150) 使负总账不被裁剪。
+            termination = -1500
 
             dof_vel_limits = -2
             action_rate = -0.01

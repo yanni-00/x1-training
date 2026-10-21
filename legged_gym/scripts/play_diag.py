@@ -11,11 +11,11 @@ import torch
 
 # play 诊断轮（卡§1 行为证据补充）：单 env + 固定 vx=0.5 命令，打时间序列 CSV
 # ——E_cmd 数字之外，看"实际速度曲线 vs 命令"的动态（跟踪滞后/幅度衰减/方向丢失）
-# model_14550 权重 lineage: 11550(lap10 posture-first)+3000(lap11 腰弯直修)=14550-iter 训练量
+# model_15000 权重 lineage: 11550(lap10 posture-first)+3000(lap11 腰弯直修)=15000-iter 训练量
 CHECKPOINT = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'checkpoints', 'model_14550_g1int.pt'))
+                              '..', '..', 'resources', 'checkpoints', 'model_15000_g1int.pt'))
 OUT_CSV = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                              '..', '..', 'resources', 'play_diag_14550.csv'))
+                              '..', '..', 'resources', 'play_diag_15000.csv'))
 CMD_VX = 0.5
 EPISODE_STEPS = 1000
 
