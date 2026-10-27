@@ -1691,7 +1691,8 @@ class H1Robot(BaseTask):
     def _reward_feet_clearance_cmd_linear(self):   
         phases = 1 - torch.abs(1.0 - torch.clip((self.foot_indices * 2.0) - 1.0, 0.0, 1.0) * 2.0)
         foot_height = (self.foot_pos_world[:, :, 2]).view(self.num_envs, -1) - self.measured_foot_scan.mean(-1)
-        target_height = self.commands[:, 6].unsqueeze(1) * phases + 0.07 
+        reference_height = getattr(self.cfg.rewards, 'feet_clearance_reference_height', 0.07)
+        target_height = self.commands[:, 6].unsqueeze(1) * phases + reference_height
         rew_foot_clearance = torch.square(target_height - foot_height) * (1 - self.desired_contact_states)
         
         return torch.sum(rew_foot_clearance, dim=1).clip(max=0.1)
@@ -1703,7 +1704,8 @@ class H1Robot(BaseTask):
                             coef[3] * ((phases - 0.5) ** 3) + coef[4] * ((phases - 0.5) ** 4)+ coef[5] * ((phases - 0.5) ** 5)
         even_curve_mask = phases < 0.5
         polynomial_curve[even_curve_mask] = 0
-        target_height = self.commands[:, 6].unsqueeze(1) * polynomial_curve + 0.07 
+        reference_height = getattr(self.cfg.rewards, 'feet_clearance_reference_height', 0.07)
+        target_height = self.commands[:, 6].unsqueeze(1) * polynomial_curve + reference_height
         foot_height = (self.foot_pos_world[:, :, 2]).view(self.num_envs, -1) - self.measured_foot_scan.mean(-1)
         rew_foot_clearance = torch.square(target_height - foot_height) * (1 - self.desired_contact_states)
 

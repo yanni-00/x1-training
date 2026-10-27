@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -116,6 +117,11 @@ def main():
                'contact_left', 'contact_right', 'standing_mask']
     columns += ['cmd_' + str(i) for i in range(env.commands.shape[1])]
     columns += ['q_' + name for name in joint_names]
+    # Additive diagnostics only; existing protocol/commands and columns retain
+    # their meanings. Save enough state to recompute both clearance references.
+    columns += ['foot_height_left', 'foot_height_right',
+                'desired_contact_left', 'desired_contact_right',
+                'foot_index_left', 'foot_index_right']
     rows = []
     failed = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
     frame_dir = output / 'frames'
@@ -140,6 +146,8 @@ def main():
             euler_angles(env.rigid_body_states[:, torso_index, 3:7]),
             (env.contact_forces[:, env.feet_indices, 2] > 1.0),
             env.standing_envs_mask.unsqueeze(1), commands_used, env.dof_pos,
+            env.foot_pos_world[:, :, 2].view(env.num_envs, -1) - env.measured_foot_scan.mean(-1),
+            env.desired_contact_states, env.foot_indices,
         ), dim=1)
         rows.append(batch.cpu().numpy())
         failed |= terminations
@@ -170,7 +178,7 @@ def main():
     col = {name: i for i, name in enumerate(columns)}
     steady = data[(data[:, col['step']] >= 200) & (data[:, col['valid']] == 1)]
     metrics = ['vx', 'vy', 'wz', 'base_height', 'pelvis_roll', 'pelvis_pitch',
-               'torso_roll', 'torso_pitch']
+               'torso_roll', 'torso_pitch', 'foot_height_left', 'foot_height_right']
     metrics += ['q_' + n for n in joint_names if any(
         part in n for part in ('waist_', 'knee', 'hip_pitch', 'ankle_pitch', 'shoulder_', 'elbow'))]
     for i in range(env.num_envs):
@@ -194,6 +202,32 @@ def main():
         contact = steady[steady[:, col['contact_' + side]] == 1]
         knee = contact[:, col['q_' + side + '_knee_joint']]
         summary[side + '_stance_knee_mean'] = None if len(knee) == 0 else float(knee.mean())
+        swing = steady[steady[:, col['desired_contact_' + side]] < 0.5]
+        summary[side + '_swing_foot_origin_height_mean'] = None if len(swing) == 0 else float(
+            swing[:, col['foot_height_' + side]].mean())
+    urdf_path = ROOT / 'resources/robots/g1/g1_29dof_anneal_23dof.urdf'
+    urdf = ET.parse(urdf_path).getroot()
+    offsets = []
+    for side in ('left', 'right'):
+        for collision in urdf.find("link[@name='%s_ankle_roll_link']" % side).findall('collision'):
+            z = float(collision.find('origin').get('xyz').split()[2])
+            offsets.append(-z + float(collision.find('geometry/sphere').get('radius')))
+    g1_reference = max(offsets)
+    foot_height = steady[:, [col['foot_height_left'], col['foot_height_right']]]
+    foot_index = steady[:, [col['foot_index_left'], col['foot_index_right']]]
+    desired = steady[:, [col['desired_contact_left'], col['desired_contact_right']]]
+    phases = 1 - np.abs(1 - np.clip(foot_index * 2 - 1, 0, 1) * 2)
+    native_reference = getattr(cfg.rewards, 'feet_clearance_reference_height', 0.07)
+    counterfactual = {}
+    for name, reference in [('native', native_reference), ('legacy_h1', 0.07), ('g1_geometry', g1_reference)]:
+        target = steady[:, col['cmd_6']:col['cmd_6']+1] * phases + reference
+        cost = np.clip(np.sum(np.square(target-foot_height) * (1-desired), axis=1), 0, .1)
+        counterfactual[name] = {'reference_height': reference, 'mean_raw_cost': float(cost.mean()),
+                               'max_raw_cost': float(cost.max())}
+    summary['clearance_diagnostics'] = {'source_urdf': str(urdf_path),
+        'urdf_sha256': hashlib.sha256(urdf_path.read_bytes()).hexdigest(),
+        'counterfactual': counterfactual,
+        'scope': 'Same recorded steady trajectory; linear clearance formula, original contact mask and clip. Not a learning-outcome prediction. G1 reference is level collision geometry.'}
     if custom.record_video:
         video = output / 'play.mp4'
         subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-framerate',
