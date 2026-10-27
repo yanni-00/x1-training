@@ -1,0 +1,24 @@
+{
+  "task": "Tracking-WalkStop-G1-v0",
+  "num_envs": 256,
+  "max_iterations": 64,
+  "seed": 1,
+  "save_interval": 16,
+  "reference": "data/raw/walk2_subject1.csv",
+  "reference_sha256": "51cf310f14ecbb8be1f41ea09345df0c89024ff884fb9ab881cac339f820c787",
+  "support_height_quantile": 0.25,
+  "support_speed_quantile": 0.5,
+  "phase_acceleration": 2,
+  "go_duration_range_s": [
+    2,
+    4
+  ],
+  "stop_duration_range_s": [
+    2,
+    4
+  ],
+  "settings_kind": "preregistered engineering smoke settings; no measured training performance implied",
+  "actor_observation_dim_expected": 160,
+  "action_dim_expected": 29,
+  "upstream_commit": "9db915838b17785c6fec90c91fe80b95b147e1bd"
+}

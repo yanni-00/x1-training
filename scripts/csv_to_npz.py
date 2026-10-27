@@ -30,6 +30,7 @@ parser.add_argument(
 )
 parser.add_argument("--output_name", type=str, required=True, help="The name of the motion npz file.")
 parser.add_argument("--output_fps", type=int, default=50, help="The fps of the output motion.")
+parser.add_argument("--output_file", type=str, default=None, help="[OMA] Save locally and exit; skips WandB upload.")
 
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -233,6 +234,8 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, joi
     # ------- data logger -------------------------------------------------------
     log = {
         "fps": [args_cli.output_fps],
+        "joint_names": np.asarray(robot.joint_names),
+        "body_names": np.asarray(robot.body_names),
         "joint_pos": [],
         "joint_vel": [],
         "body_pos_w": [],
@@ -298,6 +301,13 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, joi
             ):
                 log[k] = np.stack(log[k], axis=0)
 
+            # [OMA] Use the exact training articulation to derive body/joint ordering.
+            if args_cli.output_file:
+                import pathlib
+                pathlib.Path(args_cli.output_file).parent.mkdir(parents=True, exist_ok=True)
+                np.savez(args_cli.output_file, **log)
+                print(f"[OMA] Local reference saved: {args_cli.output_file}", flush=True)
+                break
             np.savez("/tmp/motion.npz", **log)
 
             import wandb

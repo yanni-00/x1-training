@@ -42,3 +42,11 @@ _build
 
 **/assets/
 artifacts/
+
+# OMA reproducible starter reference; generated NPZ/assets remain ignored
+!data/raw/walk2_subject1.csv
+
+data/unitree_description.tar.gz
+data/generated/
+
+/model_*.pt

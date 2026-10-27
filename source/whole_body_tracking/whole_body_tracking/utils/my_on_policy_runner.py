@@ -13,6 +13,17 @@ class MyOnPolicyRunner(OnPolicyRunner):
     def save(self, path: str, infos=None):
         """Save the model and training information."""
         super().save(path, infos)
+        # [OMA] GM's SDK reliably discovers repository-root PT artifacts.
+        relay = os.environ.get("OMA_CHECKPOINT_RELAY_DIR")
+        if relay:
+            import shutil
+            from pathlib import Path
+            destination = Path(relay) / Path(path).name
+            if Path(path).resolve() != destination.resolve():
+                temporary = destination.with_suffix(".pt.tmp")
+                shutil.copyfile(path, temporary)
+                temporary.replace(destination)
+
         if self.logger_type in ["wandb"]:
             policy_path = path.split("model")[0]
             filename = policy_path.split("/")[-2] + ".onnx"
@@ -31,6 +42,17 @@ class MotionOnPolicyRunner(OnPolicyRunner):
     def save(self, path: str, infos=None):
         """Save the model and training information."""
         super().save(path, infos)
+        # [OMA] GM's SDK reliably discovers repository-root PT artifacts.
+        relay = os.environ.get("OMA_CHECKPOINT_RELAY_DIR")
+        if relay:
+            import shutil
+            from pathlib import Path
+            destination = Path(relay) / Path(path).name
+            if Path(path).resolve() != destination.resolve():
+                temporary = destination.with_suffix(".pt.tmp")
+                shutil.copyfile(path, temporary)
+                temporary.replace(destination)
+
         if self.logger_type in ["wandb"]:
             policy_path = path.split("model")[0]
             filename = policy_path.split("/")[-2] + ".onnx"

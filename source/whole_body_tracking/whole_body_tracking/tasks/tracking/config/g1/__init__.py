@@ -36,3 +36,16 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:G1FlatLowFreqPPORunnerCfg",
     },
 )
+
+# [OMA] Commanded reference walk/hold/resume task.
+from .walk_stop_env_cfg import G1WalkStopEnvCfg
+
+gym.register(
+    id="Tracking-WalkStop-G1-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": G1WalkStopEnvCfg,
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:G1FlatPPORunnerCfg",
+    },
+)
