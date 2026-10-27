@@ -23,6 +23,7 @@ from legged_gym.envs.g1.g1r27_config import G1R27Cfg, G1R27CfgPPO
 from legged_gym.envs.g1.g1r28_config import G1R28Cfg, G1R28CfgPPO
 from legged_gym.envs.g1.g1r29 import G1R29Robot
 from legged_gym.envs.g1.g1r29_config import G1R29Cfg, G1R29CfgPPO
+from legged_gym.envs.g1.g1r30_config import G1R30Cfg, G1R30CfgPPO
 
 from legged_gym.utils.task_registry import task_registry
 
@@ -38,4 +39,5 @@ task_registry.register( "g1r26", G1R23Robot, G1R26Cfg(), G1R26CfgPPO())
 task_registry.register( "g1r27", G1R23Robot, G1R27Cfg(), G1R27CfgPPO())
 task_registry.register( "g1r28", G1R23Robot, G1R28Cfg(), G1R28CfgPPO())
 task_registry.register( "g1r29", G1R29Robot, G1R29Cfg(), G1R29CfgPPO())
+task_registry.register( "g1r30", G1R29Robot, G1R30Cfg(), G1R30CfgPPO())
 
