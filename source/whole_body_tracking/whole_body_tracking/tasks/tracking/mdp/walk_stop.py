@@ -82,7 +82,13 @@ class WalkStopCommand(MotionCommand):
     def _adaptive_sampling(self, env_ids):
         super()._adaptive_sampling(env_ids)
         # Stable-start candidate selection is confined to genuine episode resets.
-        self.clock.reset(env_ids,self.time_steps[env_ids].float())
+        phases = self.time_steps[env_ids].float()
+        if self.cfg.evaluation_start_support is not None:
+            index = self.cfg.evaluation_start_support
+            if not 0 <= index < len(self.clock.support):
+                raise ValueError('Evaluation start support index is out of range')
+            phases = self.clock.support[index].expand_as(phases)
+        self.clock.reset(env_ids,phases)
         self.time_steps[env_ids] = self.clock.phase[env_ids].long()
         self.desired_go[env_ids] = False
         self.mode_time[env_ids] = sample_uniform(*self.cfg.stop_duration_range,(len(env_ids),),self.device)
@@ -124,6 +130,7 @@ class WalkStopCommand(MotionCommand):
 class WalkStopCommandCfg(MotionCommandCfg):
     class_type: type = WalkStopCommand
     # Preregistered control settings; not measured hardware constants.
+    evaluation_start_support: int | None = None
     phase_acceleration: float = 2.0
     go_duration_range: tuple[float,float] = (2.0,4.0)
     stop_duration_range: tuple[float,float] = (2.0,4.0)

@@ -1,0 +1,35 @@
+{
+  "kind": "preregistered evaluation schedule; durations are test design choices, not measured robot parameters",
+  "nominal": true,
+  "seed": 1,
+  "initial_support_index": 0,
+  "stages": [
+    {
+      "name": "stand_initial",
+      "go": false,
+      "duration_s": 2
+    },
+    {
+      "name": "start_walk",
+      "go": true,
+      "duration_s": 5
+    },
+    {
+      "name": "stop_hold",
+      "go": false,
+      "duration_s": 5
+    },
+    {
+      "name": "restart_walk",
+      "go": true,
+      "duration_s": 5
+    },
+    {
+      "name": "stop_final",
+      "go": false,
+      "duration_s": 5
+    }
+  ],
+  "reporting_settle_s": 1,
+  "full_behavior_acceptance_requires": "Separately frozen gates, complete actual-state CSV, uninterrupted policy control, no resets/termination/exhaustion during GO, and video review. Schedule completion alone is not acceptance."
+}
