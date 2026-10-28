@@ -1,5 +1,6 @@
 """[OMA] Reproducible GM entry point: assets -> FK -> support labels -> native PPO."""
-import argparse, hashlib, importlib.util, json, os, subprocess, sys, tarfile, urllib.request
+import argparse, hashlib, importlib.util, json, os, re, shutil, subprocess, sys, tarfile, urllib.request
+from urllib.parse import unquote, urlparse
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -12,8 +13,12 @@ CSV_SHA='51cf310f14ecbb8be1f41ea09345df0c89024ff884fb9ab881cac339f820c787'
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--num_envs',type=int,default=256);p.add_argument('--iterations',type=int,default=64);p.add_argument('--seed',type=int,default=1);p.add_argument('--run_name',default='oma_walkstop_smoke');p.add_argument('--save_interval',type=int,default=16);p.add_argument('--headless',action='store_true')
+    # Same signed-URL + checksum route as the established G1 train.py.
+    p.add_argument('--gm_resume_url');p.add_argument('--checkpoint_sha256')
     args,extra=p.parse_known_args()
     if min(args.num_envs,args.iterations,args.save_interval)<=0:raise ValueError('Training sizes must be positive')
+    if bool(args.gm_resume_url)!=bool(args.checkpoint_sha256):raise ValueError('Resume URL and checkpoint checksum must be supplied together')
+    if args.checkpoint_sha256 and not re.fullmatch(r'[0-9a-f]{64}',args.checkpoint_sha256):raise ValueError('Invalid checkpoint checksum')
     os.chdir(ROOT)
     os.environ['OMA_CHECKPOINT_RELAY_DIR']=str(ROOT)
     os.environ['PYTHONPATH']=str(SOURCE)+os.pathsep+os.environ.get('PYTHONPATH','')
@@ -22,7 +27,7 @@ def main():
     if not (ASSETS/'unitree_description/urdf/g1/main.urdf').is_file():
         archive=ROOT/'data/unitree_description.tar.gz';archive.parent.mkdir(exist_ok=True)
         with urllib.request.urlopen(ASSET_URL,timeout=120) as src,archive.open('wb') as dst:
-            import shutil;shutil.copyfileobj(src,dst)
+            shutil.copyfileobj(src,dst)
         if hashlib.sha256(archive.read_bytes()).hexdigest()!=ASSET_SHA:raise RuntimeError('Robot asset archive changed; freeze and review new version')
         ASSETS.mkdir(parents=True,exist_ok=True)
         with tarfile.open(archive,'r:gz') as tar:
@@ -59,6 +64,27 @@ def main():
     train=ROOT/'scripts/rsl_rl/train.py'
     argv=[sys.executable,str(train),'--task','Tracking-WalkStop-G1-v0','--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
     if args.headless:argv.append('--headless')
+    if args.gm_resume_url:
+        # Match the native agent's actual experiment_name (g1_flat), not the
+        # unused --experiment_name CLI override. Never silently start fresh.
+        match=re.search(r'model_(\d+)_',unquote(urlparse(args.gm_resume_url).path))
+        if not match:raise ValueError('Resume URL lacks a checkpoint number')
+        resume_dir=ROOT/'logs/rsl_rl/g1_flat/gm_resume';resume_dir.mkdir(parents=True,exist_ok=True)
+        name=f'model_{match.group(1)}.pt';checkpoint_path=resume_dir/name
+        print('[OMA] Downloading GM resume checkpoint '+name,flush=True)
+        with urllib.request.urlopen(args.gm_resume_url,timeout=120) as response,checkpoint_path.open('wb') as destination:
+            shutil.copyfileobj(response,destination)
+        if hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()!=args.checkpoint_sha256:
+            raise RuntimeError('Resume checkpoint checksum mismatch')
+        import torch
+        checkpoint=torch.load(checkpoint_path,map_location='cpu',weights_only=True)
+        runtime=checkpoint['infos']['oma_runtime']
+        if runtime['reference_sha256']!=hashlib.sha256(labeled.read_bytes()).hexdigest():
+            raise RuntimeError('Resume reference differs from the exact trained motion')
+        if not runtime['actor_obs_normalization']:
+            raise RuntimeError('Resume model lacks the required native observation normalization')
+        print('[OMA] Verified resume checkpoint: '+json.dumps({'file':name,'sha256':args.checkpoint_sha256,'saved_iteration':checkpoint['iter'],'reference_matches':True}),flush=True)
+        argv+=['--resume','True','--load_run','gm_resume','--checkpoint',name]
     argv+=extra+[f'agent.save_interval={args.save_interval}']
     # exec keeps the PID monitored by gm-run; a detached grandchild loses SDK model tracking.
     os.execv(sys.executable,argv)
