@@ -307,6 +307,10 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene, joi
                 pathlib.Path(args_cli.output_file).parent.mkdir(parents=True, exist_ok=True)
                 np.savez(args_cli.output_file, **log)
                 print(f"[OMA] Local reference saved: {args_cli.output_file}", flush=True)
+                if args_cli.headless:
+                    # This is a dedicated FK worker. Its NPZ is already closed.
+                    # Isaac Sim 5.1 documents fast shutdown for standalone workers.
+                    simulation_app.close(wait_for_replicator=False, skip_cleanup=True)
                 break
             np.savez("/tmp/motion.npz", **log)
 

@@ -43,6 +43,16 @@ def main():
     cmd=[sys.executable,str(ROOT/'scripts/csv_to_npz.py'),'--input_file',str(csv),'--input_fps','30','--output_fps','50','--output_name','oma_walk2_subject1','--output_file',str(converted)]
     if args.headless:cmd.append('--headless')
     subprocess.run(cmd,check=True)
+    if not converted.is_file():
+        raise RuntimeError("FK worker returned without the required reference NPZ")
+    import numpy as np
+    with np.load(converted,allow_pickle=False) as data:
+        required=["joint_pos","joint_vel","body_pos_w","body_quat_w","body_lin_vel_w","body_ang_vel_w"]
+        if any(not np.isfinite(data[key]).all() for key in required):
+            raise RuntimeError("Non-finite FK reference")
+        if data["joint_pos"].shape[1]!=29 or data["joint_vel"].shape!=data["joint_pos"].shape:
+            raise RuntimeError("FK joint dimensions are incompatible")
+    print("[OMA] FK worker exited and reference arrays validated",flush=True)
     subprocess.run([sys.executable,str(ROOT/'scripts/prepare_walkstop_motion.py'),'--input',str(converted),'--output',str(labeled)],check=True)
     print('[OMA] Stage: native BeyondMimic PPO walk/hold/resume training',flush=True)
     train=ROOT/'scripts/rsl_rl/train.py'
