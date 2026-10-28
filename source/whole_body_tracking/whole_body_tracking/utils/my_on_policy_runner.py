@@ -41,6 +41,12 @@ class MotionOnPolicyRunner(OnPolicyRunner):
 
     def save(self, path: str, infos=None):
         """Save the model and training information."""
+        # Motion-tracking inference needs the exact reference and joint order.
+        from whole_body_tracking.utils.oma_checkpoint import collect_runtime
+        if not hasattr(self, "_oma_runtime"):
+            self._oma_runtime = collect_runtime(self.env, self.alg.policy)
+        infos = dict(infos or {})
+        infos["oma_runtime"] = self._oma_runtime
         super().save(path, infos)
         # [OMA] GM's SDK reliably discovers repository-root PT artifacts.
         relay = os.environ.get("OMA_CHECKPOINT_RELAY_DIR")

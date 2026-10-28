@@ -138,6 +138,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     runner = OnPolicyRunner(
         env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device, registry_name=registry_name
     )
+    if agent_cfg.empirical_normalization and not (
+        getattr(runner.alg.policy, "actor_obs_normalization", False) and
+        getattr(runner.alg.policy, "critic_obs_normalization", False)
+    ):
+        raise RuntimeError("Upstream empirical observation normalization is not active")
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # save resume path before creating a new log_dir
@@ -154,6 +159,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # run training
     runner.learn(num_learning_iterations=agent_cfg.max_iterations, init_at_random_ep_len=True)
+
+    from whole_body_tracking.utils.runtime_policy import verify_runtime_checkpoint
+    import json
+    final_path = os.path.join(log_dir, f"model_{runner.current_learning_iteration}.pt")
+    parity = verify_runtime_checkpoint(runner.alg.policy, final_path)
+    print("[OMA] Runtime checkpoint actor parity: " + json.dumps(parity), flush=True)
 
     # close the simulator
     env.close()
