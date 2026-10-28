@@ -11,8 +11,9 @@ CSV_SHA='51cf310f14ecbb8be1f41ea09345df0c89024ff884fb9ab881cac339f820c787'
 
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--num_envs',type=int,default=256);p.add_argument('--iterations',type=int,default=64);p.add_argument('--seed',type=int,default=1);p.add_argument('--run_name',default='oma_walkstop_smoke');p.add_argument('--headless',action='store_true')
+    p=argparse.ArgumentParser();p.add_argument('--num_envs',type=int,default=256);p.add_argument('--iterations',type=int,default=64);p.add_argument('--seed',type=int,default=1);p.add_argument('--run_name',default='oma_walkstop_smoke');p.add_argument('--save_interval',type=int,default=16);p.add_argument('--headless',action='store_true')
     args,extra=p.parse_known_args()
+    if min(args.num_envs,args.iterations,args.save_interval)<=0:raise ValueError('Training sizes must be positive')
     os.chdir(ROOT)
     os.environ['OMA_CHECKPOINT_RELAY_DIR']=str(ROOT)
     os.environ['PYTHONPATH']=str(SOURCE)+os.pathsep+os.environ.get('PYTHONPATH','')
@@ -58,7 +59,7 @@ def main():
     train=ROOT/'scripts/rsl_rl/train.py'
     argv=[sys.executable,str(train),'--task','Tracking-WalkStop-G1-v0','--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
     if args.headless:argv.append('--headless')
-    argv+=extra+['agent.save_interval=16']
+    argv+=extra+[f'agent.save_interval={args.save_interval}']
     # exec keeps the PID monitored by gm-run; a detached grandchild loses SDK model tracking.
     os.execv(sys.executable,argv)
 

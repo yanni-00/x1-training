@@ -1,0 +1,12 @@
+{
+  "settings_kind": "Preregistered engineering acceptance criteria chosen for this simulation pilot; not measured G1/F1 hardware limits or estimated performance. Frozen before launching the baseline.",
+  "stop_speed_max_mps": 0.1,
+  "stop_drift_max_m": 0.1,
+  "tilt_max_rad": 0.35,
+  "go_velocity_rmse_max_mps": 0.3,
+  "go_path_min_m": 0.5,
+  "both_contact_fraction_min": 0.8,
+  "contact_foot_speed_max_mps": 0.2,
+  "response_deadline_s": null,
+  "scope": "One nominal continuous MuJoCo standing/start/walk/stop/restart/stop replay; independent training reproducibility and longer motion-boundary tests remain separate gates."
+}

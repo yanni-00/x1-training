@@ -48,6 +48,13 @@ class MotionOnPolicyRunner(OnPolicyRunner):
         infos = dict(infos or {})
         infos["oma_runtime"] = self._oma_runtime
         super().save(path, infos)
+        # Fail early before a long pilot if native and portable inference differ.
+        if not getattr(self, "_oma_first_save_verified", False):
+            import json
+            from whole_body_tracking.utils.runtime_policy import verify_runtime_checkpoint
+            parity = verify_runtime_checkpoint(self.alg.policy, path)
+            print("[OMA] First saved runtime actor parity: " + json.dumps(parity), flush=True)
+            self._oma_first_save_verified = True
         # [OMA] GM's SDK reliably discovers repository-root PT artifacts.
         relay = os.environ.get("OMA_CHECKPOINT_RELAY_DIR")
         if relay:

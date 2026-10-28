@@ -30,14 +30,43 @@ def score(directory,gates=None):
     for spec in protocol['stages']:
         data=[r for r in rows if r['stage']==spec['name']]
         if not data:continue
-        t=np.asarray([float(r['time_s']) for r in data]);tail=t>=t[0]+protocol['reporting_settle_s'];
-        if not tail.any():raise ValueError('Stage has no post-settle samples: '+spec['name'])
+        t=np.asarray([float(r['time_s']) for r in data])
+        # STOP quality is assessed over a terminal stable-hold window. Its
+        # response latency is reported separately, without a fixed deadline.
+        hold_s=spec.get('stability_window_s')
+        if hold_s is not None:
+            if spec['go'] or hold_s<=0 or hold_s>spec['duration_s']:raise ValueError('Invalid stable-hold window')
+            tail=t>=t[0]+spec['duration_s']-hold_s-1e-9
+        else:
+            tail=t>=t[0]+spec.get('reporting_settle_s',protocol['reporting_settle_s'])
+        checks[spec['name']+'_has_post_settle_samples']=bool(tail.any())
+        if not tail.any():
+            metrics[spec['name']]={'recorded_duration_s':float(len(data)*dt),'tail_samples':0,'status':'No post-settle data; the run cannot pass'}
+            continue
         pos=np.asarray([[float(r['root_x']),float(r['root_y'])] for r in data]);v=np.asarray([[float(r['root_vx']),float(r['root_vy'])] for r in data]);ref=np.asarray([[float(r['reference_vx']),float(r['reference_vy'])] for r in data]);speed=np.linalg.norm(v,axis=1)
         tilt=np.asarray([float(r['root_tilt_rad']) for r in data]);rates=np.asarray([float(r['reference_rate']) for r in data])
         forces=np.asarray([[[float(r[f'{s}_foot_{k}']) for k in ['fx','fy','fz']] for s in ['left','right']] for r in data]);contact=np.linalg.norm(forces,axis=-1)>force_limit
         foot_v=np.asarray([[[float(r[f'{s}_foot_{k}']) for k in ['vx','vy']] for s in ['left','right']] for r in data]);slip=np.linalg.norm(foot_v,axis=-1)
         contact_slip=slip[tail][contact[tail]]
-        m={'recorded_duration_s':float(len(data)*dt),'tail_samples':int(tail.sum()),'actual_speed_mean_mps':float(speed[tail].mean()),'actual_speed_max_mps':float(speed[tail].max()),'actual_planar_drift_m':float(np.linalg.norm(pos[tail][-1]-pos[tail][0])),'actual_planar_path_m':float(np.linalg.norm(np.diff(pos,axis=0),axis=1).sum()),'velocity_tracking_rmse_mps':float(np.sqrt(np.mean(np.sum((v-ref)**2,axis=1)))),'tilt_max_rad':float(tilt.max()),'both_contact_fraction':float(contact[tail].all(axis=1).mean()),'contact_foot_speed_max_mps':float(contact_slip.max()) if len(contact_slip) else None,'reference_rate_tail_max':float(rates[tail].max())}
+        m={'recorded_duration_s':float(len(data)*dt),'tail_samples':int(tail.sum()),'actual_speed_mean_mps':float(speed[tail].mean()),'actual_speed_max_mps':float(speed[tail].max()),'actual_planar_drift_m':float(np.linalg.norm(pos[tail]-pos[tail][0],axis=1).max()),'actual_planar_path_m':float(np.linalg.norm(np.diff(pos,axis=0),axis=1).sum()),'velocity_tracking_rmse_mps':float(np.sqrt(np.mean(np.sum((v-ref)**2,axis=1)))),'tilt_max_rad':float(tilt.max()),'both_contact_fraction':float(contact[tail].all(axis=1).mean()),'contact_foot_speed_max_mps':float(contact_slip.max()) if len(contact_slip) else None,'reference_rate_tail_max':float(rates[tail].max())}
+        if not spec['go']:
+            m['reference_hold_response_s']=None
+            moving=np.flatnonzero(rates!=0)
+            held_from=int(moving[-1]+1) if len(moving) else 0
+            if held_from<len(data):m['reference_hold_response_s']=float(t[held_from]-t[0])
+            m['stable_stop_response_s']=None
+            m['response_definition']='Earliest suffix satisfying all frozen stop gates and reference hold through the stage end, with the required minimum stable-hold duration. Null means not observed; no hard latency threshold.'
+            if hold_s is not None and gates is not None and all(k in gates for k in REQUIRED_GATES):
+                minimum=round(hold_s/dt)
+                for j in range(max(0,len(data)-minimum+1)):
+                    touching_slip=slip[j:][contact[j:]]
+                    stable=(np.all(rates[j:]==0) and speed[j:].max()<=gates['stop_speed_max_mps']
+                        and np.linalg.norm(pos[j:]-pos[j],axis=1).max()<=gates['stop_drift_max_m']
+                        and tilt[j:].max()<=gates['tilt_max_rad']
+                        and contact[j:].all(axis=1).mean()>=gates['both_contact_fraction_min']
+                        and len(touching_slip)>0 and touching_slip.max()<=gates['contact_foot_speed_max_mps'])
+                    if stable:
+                        m['stable_stop_response_s']=float(t[j]-t[0]);break
         metrics[spec['name']]=m
         if not spec['go']:checks[spec['name']+'_reference_hold_reached']=bool(np.all(rates[tail]==0))
         if gates is not None and all(k in gates for k in REQUIRED_GATES):

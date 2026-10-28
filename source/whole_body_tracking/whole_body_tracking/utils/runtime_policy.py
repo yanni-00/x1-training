@@ -40,14 +40,30 @@ class RuntimeActor(nn.Module):
 
 def verify_runtime_checkpoint(policy, path):
     checkpoint = torch.load(path, map_location="cpu", weights_only=True)
-    actor = RuntimeActor(checkpoint).eval()
+    # Constructing Linear layers consumes CPU RNG even when weights are loaded.
+    with torch.random.fork_rng(devices=[]):
+        actor = RuntimeActor(checkpoint).eval()
     generator = torch.Generator(device="cpu").manual_seed(17)
     observations = torch.randn((64,160), generator=generator)
     if actor.normalized: observations = observations * actor.std + actor.mean
     device = next(policy.parameters()).device
-    with torch.inference_mode():
-        expected = policy.actor(policy.actor_obs_normalizer(observations.to(device))).cpu()
-        actual = actor(observations)
+    # Compare float32 exports without TF32 approximation; restore training flags.
+    matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
+    cudnn_tf32 = torch.backends.cudnn.allow_tf32
+    training_modes = [(module, module.training) for module in policy.modules()]
+    try:
+        # Empirical normalizers must not update statistics on synthetic probes.
+        policy.eval()
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+        with torch.inference_mode():
+            expected = policy.actor(policy.actor_obs_normalizer(observations.to(device))).cpu()
+            actual = actor(observations)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = matmul_tf32
+        torch.backends.cudnn.allow_tf32 = cudnn_tf32
+        for module, training in training_modes:
+            module.training = training
     # Same parity tolerances as the existing BeyondMimic package exporter.
     torch.testing.assert_close(actual, expected, rtol=2e-4, atol=2e-4)
     return {"samples":64, "max_abs_error":float((actual-expected).abs().max()),

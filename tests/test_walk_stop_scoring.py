@@ -18,6 +18,17 @@ with tempfile.TemporaryDirectory() as d:
  def save():
   with (d/'joints.csv').open('w',newline='',encoding='utf-8') as f:w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
  save();r=m.score(d,gates);assert r['quantitative_pass'] and not r['run_acceptance'], 'Unreviewed video must not pass'
+ original=json.loads(json.dumps(rows))
+ stages[2]['stability_window_s']=.5
+ (d/'evaluation_manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
+ for j,row in enumerate([row for row in rows if row['stage']=='stop']):
+  row['root_vx']=.8 if j<2 else 0
+  row['reference_rate']=1 if j<2 else 0
+  row['root_x']=j*.4 if j<2 else .8
+ save();r=m.score(d,gates)
+ assert r['quantitative_pass'] and r['stage_metrics']['stop']['stable_stop_response_s']==1, 'Late stable stop must report latency separately and pass the terminal hold window'
+ rows=original;stages[2].pop('stability_window_s')
+ (d/'evaluation_manifest.json').write_text(json.dumps(manifest),encoding='utf-8')
  rows[2]['time_s']+=.01
  save();r=m.score(d,gates);assert not r['structural_checks']['timestamps_match_policy_clock'] and not r['quantitative_pass'], 'Bad timebase must not pass'
  rows[2]['time_s']-=.01
@@ -29,4 +40,10 @@ with tempfile.TemporaryDirectory() as d:
  for row in rows:
   if row['stage']=='restart':row['reference_exhausted']=1
  save();r=m.score(d,gates);assert not r['structural_checks']['no_reference_exhaustion_during_go'], 'Finite playlist exhaustion masqueraded as locomotion'
+with tempfile.TemporaryDirectory() as early:
+ early=Path(early);short_manifest=dict(manifest);short_manifest['protocol']={'stages':stages,'reporting_settle_s':1};short_manifest['completed_protocol']=False
+ (early/'evaluation_manifest.json').write_text(json.dumps(short_manifest),encoding='utf-8')
+ first=dict(rows[0]);first['terminated']=1
+ with (early/'joints.csv').open('w',newline='',encoding='utf-8') as f:w=csv.DictWriter(f,fieldnames=list(first));w.writeheader();w.writerow(first)
+ failed=m.score(early,gates);assert not failed['quantitative_pass'] and failed['stage_metrics']['stand']['tail_samples']==0, 'Early fall must produce a failed report without invented steady-state values'
 print(json.dumps({'synthetic_good_motion_metrics':True,'video_required_for_run_acceptance':True,'frozen_gates_required':True,'actual_sliding_rejected_despite_reference_hold':True,'reference_exhaustion_during_go_rejected':True,'malformed_timebase_rejected':True}))

@@ -9,6 +9,8 @@ from .reference_clock import SupportPhaseClock
 
 class WalkStopCommand(MotionCommand):
     def __init__(self, cfg, env):
+        if not 0 <= cfg.initial_go_probability <= 1:
+            raise ValueError('Initial GO probability must be in [0, 1]')
         super().__init__(cfg, env)
         with np.load(cfg.motion_file, allow_pickle=False) as data:
             support = data['support_frames']
@@ -90,8 +92,18 @@ class WalkStopCommand(MotionCommand):
             phases = self.clock.support[index].expand_as(phases)
         self.clock.reset(env_ids,phases)
         self.time_steps[env_ids] = self.clock.phase[env_ids].long()
-        self.desired_go[env_ids] = False
-        self.mode_time[env_ids] = sample_uniform(*self.cfg.stop_duration_range,(len(env_ids),),self.device)
+        # Training must see walking before short early episodes terminate.
+        # The parent resampler uses these rate-scaled reference velocities when
+        # it initializes the robot. Evaluation always starts in static STOP.
+        moving = torch.rand(len(env_ids),device=self.device) < self.cfg.initial_go_probability
+        if self.cfg.evaluation_start_support is not None:
+            moving.zero_()
+        self.desired_go[env_ids] = moving
+        self.clock.rate[env_ids] = moving.float()
+        self.clock.was_go[env_ids] = moving
+        go_time = sample_uniform(*self.cfg.go_duration_range,(len(env_ids),),self.device)
+        stop_time = sample_uniform(*self.cfg.stop_duration_range,(len(env_ids),),self.device)
+        self.mode_time[env_ids] = torch.where(moving,go_time,stop_time)
 
     def _update_command(self):
         dt = self._env.cfg.sim.dt*self._env.cfg.decimation
@@ -131,6 +143,7 @@ class WalkStopCommandCfg(MotionCommandCfg):
     class_type: type = WalkStopCommand
     # Preregistered control settings; not measured hardware constants.
     evaluation_start_support: int | None = None
+    initial_go_probability: float = 0.5
     phase_acceleration: float = 2.0
     go_duration_range: tuple[float,float] = (2.0,4.0)
     stop_duration_range: tuple[float,float] = (2.0,4.0)
