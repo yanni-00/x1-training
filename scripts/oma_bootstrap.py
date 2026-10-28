@@ -28,6 +28,13 @@ def main():
             for m in tar.getmembers():
                 if not (ASSETS/m.name).resolve().is_relative_to(ASSETS.resolve()) or m.issym() or m.islnk():raise RuntimeError('Unsafe asset archive')
             tar.extractall(ASSETS)
+    # Freeze the same public G1 assets in Git, as in the existing G1 pipeline.
+    manifest=json.loads((ROOT/'configs/g1_assets.json').read_text())
+    for item in manifest['files']:
+        asset=ASSETS/'unitree_description'/item['path']
+        if not asset.is_file() or hashlib.sha256(asset.read_bytes()).hexdigest()!=item['sha256']:
+            raise RuntimeError('Frozen robot asset missing or changed: '+item['path'])
+    print('[OMA] Frozen G1 robot assets verified; no live asset fetch required',flush=True)
     csv=ROOT/'data/raw/walk2_subject1.csv'
     if hashlib.sha256(csv.read_bytes()).hexdigest()!=CSV_SHA:raise RuntimeError('Starter motion checksum mismatch')
     generated=ROOT/'data/generated';generated.mkdir(parents=True,exist_ok=True)
