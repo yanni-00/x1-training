@@ -27,11 +27,11 @@ class G1R29Robot(G1R23Robot):
 
     def _reward_shoulder_deviation(self):
         error = self._arm_rest_error()
-        # Existing component and external scale are retained. Give pitch the
-        # same internal weight as the existing roll/yaw shoulder coordinates;
-        # the original elbow weight and geometric hanging reference remain.
+        # Existing component and external scale are retained. Defaults preserve
+        # R29/R30 exactly; R31 isolates the residual elbow-coordinate priority.
         cost = (2 * torch.square(error[:, self.shoulder_inds]).sum(-1)
                 + self.cfg.rewards.arm_swing_pitch_weight * torch.square(
                     error[:, self.swing_shoulder_pitch_inds]).sum(-1)
-                + .25 * torch.square(error[:, self.arm_rest_elbow_inds]).sum(-1))
+                + getattr(self.cfg.rewards, 'arm_rest_elbow_weight', .25)
+                * torch.square(error[:, self.arm_rest_elbow_inds]).sum(-1))
         return cost * (~self.interrupt_mask)
