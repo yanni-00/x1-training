@@ -166,6 +166,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     parity = verify_runtime_checkpoint(runner.alg.policy, final_path)
     print("[OMA] Runtime checkpoint actor parity: " + json.dumps(parity), flush=True)
 
+    # Reuse the existing G1 final upload window (unitree_rl_lab_train/train.py).
+    upload_wait = int(os.environ.get("OMA_CHECKPOINT_UPLOAD_WAIT_S", "0"))
+    if upload_wait < 0:
+        raise ValueError("Negative checkpoint upload wait")
+    if upload_wait:
+        import time
+        print(f"[OMA] Waiting {upload_wait}s for the SDK checkpoint upload window", flush=True)
+        time.sleep(upload_wait)
+
     # close the simulator
     env.close()
 

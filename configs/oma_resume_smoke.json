@@ -1,0 +1,37 @@
+{
+  "task": "Tracking-WalkStop-G1-v0",
+  "num_envs": 256,
+  "max_iterations": 2,
+  "seed": 1,
+  "save_interval": 500,
+  "reference": "data/raw/walk2_subject1.csv",
+  "reference_sha256": "51cf310f14ecbb8be1f41ea09345df0c89024ff884fb9ab881cac339f820c787",
+  "support_height_quantile": 0.25,
+  "support_speed_quantile": 0.5,
+  "phase_acceleration": 2,
+  "go_duration_range_s": [
+    2,
+    4
+  ],
+  "stop_duration_range_s": [
+    2,
+    4
+  ],
+  "settings_kind": "Preregistered artifact-delivery-only settings; no behavior/convergence claim. New trained PT must appear in GM model list, download, pass checksum/provenance and safe tensor loading before any full continuation.",
+  "actor_observation_dim_expected": 160,
+  "action_dim_expected": 29,
+  "upstream_commit": "9db915838b17785c6fec90c91fe80b95b147e1bd",
+  "initial_go_probability": 0.5,
+  "evaluation_protocol": "configs/eval_walk_stop.json",
+  "behavior_gates": "configs/behavior_gates.json",
+  "mode": "resume_artifact_delivery_smoke",
+  "additional_iterations": 2,
+  "parent_task": "TASK_20261028_102",
+  "parent_checkpoint": "model_1999.pt",
+  "parent_checkpoint_sha256": "8282d457d649f6cb2f190d2b13b474be5c8a7da8b9bc75f4b585c04bc7965551",
+  "resume_reference_sha256": "123151addc531f719aef4656df5dd17394fa67e5dd1b0c3183b613efda7b07ac",
+  "continuation_scope": "Restore native actor/critic/optimizer/normalization/current iteration. Environment states, adaptive sampling counts and RNG trajectory are not restored; not bitwise continuation and not an independent seed.",
+  "stop_rule": "If same-protocol GO tracking stagnates or quality regresses after this continuation, do not launch another unchanged extension; inspect training coverage and tracking precision first.",
+  "checkpoint_relay": "First PT directory logs/rsl_rl/g1_flat/gm_resume, matching existing unitree_rl_lab_train._gm_relay_dir",
+  "upload_wait_source": "unitree_rl_lab_train/scripts/rsl_rl/train.py final upload window"
+}

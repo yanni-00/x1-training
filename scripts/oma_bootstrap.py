@@ -70,6 +70,10 @@ def main():
         match=re.search(r'model_(\d+)_',unquote(urlparse(args.gm_resume_url).path))
         if not match:raise ValueError('Resume URL lacks a checkpoint number')
         resume_dir=ROOT/'logs/rsl_rl/g1_flat/gm_resume';resume_dir.mkdir(parents=True,exist_ok=True)
+        # The existing G1 pipeline documents that GM binds its first PT
+        # directory. Resume downloads appear here before any new training save.
+        os.environ['OMA_CHECKPOINT_RELAY_DIR']=str(resume_dir)
+        os.environ['OMA_CHECKPOINT_UPLOAD_WAIT_S']='120'
         name=f'model_{match.group(1)}.pt';checkpoint_path=resume_dir/name
         print('[OMA] Downloading GM resume checkpoint '+name,flush=True)
         with urllib.request.urlopen(args.gm_resume_url,timeout=120) as response,checkpoint_path.open('wb') as destination:

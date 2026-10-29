@@ -20,9 +20,9 @@ class MyOnPolicyRunner(OnPolicyRunner):
             from pathlib import Path
             destination = Path(relay) / Path(path).name
             if Path(path).resolve() != destination.resolve():
-                temporary = destination.with_suffix(".pt.tmp")
-                shutil.copyfile(path, temporary)
-                temporary.replace(destination)
+                # Match the established G1 relay: a new PT in the SDK-bound
+                # directory emits the file event its uploader consumes.
+                shutil.copy2(path, destination)
 
         if self.logger_type in ["wandb"]:
             policy_path = path.split("model")[0]
@@ -62,9 +62,8 @@ class MotionOnPolicyRunner(OnPolicyRunner):
             from pathlib import Path
             destination = Path(relay) / Path(path).name
             if Path(path).resolve() != destination.resolve():
-                temporary = destination.with_suffix(".pt.tmp")
-                shutil.copyfile(path, temporary)
-                temporary.replace(destination)
+                shutil.copy2(path, destination)
+                print(f"[OMA] Checkpoint relayed to SDK PT directory: {destination}", flush=True)
 
         if self.logger_type in ["wandb"]:
             policy_path = path.split("model")[0]
