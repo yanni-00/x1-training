@@ -1,0 +1,42 @@
+{
+  "kind": "Preregistered held-out command schedule and initial-support test; frames were in training reference, so this is not held-out motion-data generalization.",
+  "nominal": true,
+  "seed": 1,
+  "initial_support_index": 23,
+  "stages": [
+    {
+      "name": "stand_initial",
+      "go": false,
+      "duration_s": 3
+    },
+    {
+      "name": "start_walk",
+      "go": true,
+      "duration_s": 6
+    },
+    {
+      "name": "stop_hold",
+      "go": false,
+      "duration_s": 8,
+      "stability_window_s": 2
+    },
+    {
+      "name": "restart_walk",
+      "go": true,
+      "duration_s": 6
+    },
+    {
+      "name": "stop_final",
+      "go": false,
+      "duration_s": 8,
+      "stability_window_s": 2
+    }
+  ],
+  "reporting_settle_s": 1,
+  "full_behavior_acceptance_requires": "Separately frozen gates, complete actual-state CSV, uninterrupted policy control, no resets/termination/exhaustion during GO, and video review. Schedule completion alone is not acceptance.",
+  "abort_pelvis_height_m": 0.35,
+  "abort_tilt_rad": 0.85,
+  "abort_limits_source": "Existing project offline verifier 1_G1_deploy-main/tools/verify_beyondmimic.py",
+  "stop_response_policy": "No user-specified response deadline. Score terminal stable-hold quality; report earliest sustained stable-stop response separately. Finite stage duration limits observation, not a claimed hardware response requirement.",
+  "version": "stable-stop-separate-latency-v2"
+}

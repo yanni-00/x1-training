@@ -15,15 +15,24 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--num_envs',type=int,default=256);p.add_argument('--iterations',type=int,default=64);p.add_argument('--seed',type=int,default=1);p.add_argument('--run_name',default='oma_walkstop_smoke');p.add_argument('--save_interval',type=int,default=16);p.add_argument('--headless',action='store_true')
     # Same signed-URL + checksum route as the established G1 train.py.
     p.add_argument('--gm_resume_url');p.add_argument('--checkpoint_sha256')
+    p.add_argument('--native_crosscheck', action='store_true',
+                   help='Evaluate the supplied fixed checkpoint; no PPO updates or environment installation')
     args,extra=p.parse_known_args()
+    if args.native_crosscheck and not args.gm_resume_url:
+        raise ValueError('Native crosscheck requires the already authorized source checkpoint')
     if min(args.num_envs,args.iterations,args.save_interval)<=0:raise ValueError('Training sizes must be positive')
     if bool(args.gm_resume_url)!=bool(args.checkpoint_sha256):raise ValueError('Resume URL and checkpoint checksum must be supplied together')
     if args.checkpoint_sha256 and not re.fullmatch(r'[0-9a-f]{64}',args.checkpoint_sha256):raise ValueError('Invalid checkpoint checksum')
     os.chdir(ROOT)
     os.environ['OMA_CHECKPOINT_RELAY_DIR']=str(ROOT)
     os.environ['PYTHONPATH']=str(SOURCE)+os.pathsep+os.environ.get('PYTHONPATH','')
-    missing=[pkg for mod,pkg in [('psutil','psutil'),('onnxscript','onnxscript'),('wandb','wandb>=0.19'),('toml','toml')] if importlib.util.find_spec(mod) is None]
-    if missing:subprocess.run([sys.executable,'-m','pip','install',*missing],check=True)
+    # Diagnostic mode uses only the image's existing Lab/Torch/Numpy stack.
+    # It does not import the PPO exporter/WandB path or install dependencies.
+    if not args.native_crosscheck:
+        missing=[pkg for mod,pkg in [('psutil','psutil'),('onnxscript','onnxscript'),('wandb','wandb>=0.19'),('toml','toml')] if importlib.util.find_spec(mod) is None]
+        if missing:subprocess.run([sys.executable,'-m','pip','install',*missing],check=True)
+    if args.native_crosscheck and not (ASSETS/'unitree_description/urdf/g1/main.urdf').is_file():
+        raise RuntimeError('Diagnostic mode requires the assets already frozen in this repository')
     if not (ASSETS/'unitree_description/urdf/g1/main.urdf').is_file():
         archive=ROOT/'data/unitree_description.tar.gz';archive.parent.mkdir(exist_ok=True)
         with urllib.request.urlopen(ASSET_URL,timeout=120) as src,archive.open('wb') as dst:
@@ -60,7 +69,7 @@ def main():
             raise RuntimeError("FK joint dimensions are incompatible")
     print("[OMA] FK worker exited and reference arrays validated",flush=True)
     subprocess.run([sys.executable,str(ROOT/'scripts/prepare_walkstop_motion.py'),'--input',str(converted),'--output',str(labeled)],check=True)
-    print('[OMA] Stage: native BeyondMimic PPO walk/hold/resume training',flush=True)
+    print('[OMA] Stage: fixed-weight native evaluation' if args.native_crosscheck else '[OMA] Stage: native BeyondMimic PPO walk/hold/resume training',flush=True)
     train=ROOT/'scripts/rsl_rl/train.py'
     argv=[sys.executable,str(train),'--task','Tracking-WalkStop-G1-v0','--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
     if args.headless:argv.append('--headless')
@@ -89,6 +98,20 @@ def main():
             raise RuntimeError('Resume model lacks the required native observation normalization')
         print('[OMA] Verified resume checkpoint: '+json.dumps({'file':name,'sha256':args.checkpoint_sha256,'saved_iteration':checkpoint['iter'],'reference_matches':True}),flush=True)
         argv+=['--resume','True','--load_run','gm_resume','--checkpoint',name]
+    if args.native_crosscheck:
+        # Reuse the existing download, reference conversion and SDK-bound PT
+        # directory above. This branch constructs no optimizer and installs no
+        # environment. The CSV bundle is diagnostic data, not new weights.
+        argv=[sys.executable,str(ROOT/'scripts/rsl_rl/eval_native_crosscheck.py'),
+              '--checkpoint_file',str(checkpoint_path),'--motion_file',str(labeled),
+              '--protocol_manifest',str(ROOT/'configs/native_eval_protocols/manifest.json'),
+              '--output_dir',str(ROOT/'logs/native_crosscheck'),
+              '--bundle_file',str(resume_dir/'model_isaac_csv.pt'),
+              '--checkpoint_sha256',args.checkpoint_sha256]
+        if args.headless:argv.append('--headless')
+        if extra:raise ValueError('Native crosscheck does not accept training overrides')
+        print('[OMA] Stage: fixed-weight native diagnostic; zero PPO updates',flush=True)
+        os.execv(sys.executable,argv)
     argv+=extra+[f'agent.save_interval={args.save_interval}']
     # exec keeps the PID monitored by gm-run; a detached grandchild loses SDK model tracking.
     os.execv(sys.executable,argv)

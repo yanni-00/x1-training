@@ -1,0 +1,30 @@
+{
+  "scope": "Frozen same-weight native/MuJoCo crosscheck, not held-out motion generalization",
+  "sourceExperiment": "exp-20261029-002",
+  "protocols": [
+    {
+      "case": "nominal",
+      "file": "nominal.json",
+      "sha256": "12dbeb8676fa0cfa1dd09ac45996eb5f9a5e91a698abc8fada5cdb4ae6ee59dc",
+      "source": "6_sim-train/G1/beyondmimic_walk_stop/configs/eval_walk_stop.json"
+    },
+    {
+      "case": "support_1",
+      "file": "support_1.json",
+      "sha256": "5c4bf98d070846b26dc93a22b525e0dcccc63dcc2c57337e7c6199d29c006ff7",
+      "source": "oma-runs/beyondmimic-g1/.oma/experiments/exp-20261029-002/evaluation/heldout-protocols/support_1.json"
+    },
+    {
+      "case": "support_11",
+      "file": "support_11.json",
+      "sha256": "6285fff50af48339d370387f66fc007f3aac559ba0f371821f6fd90918e4693a",
+      "source": "oma-runs/beyondmimic-g1/.oma/experiments/exp-20261029-002/evaluation/heldout-protocols/support_11.json"
+    },
+    {
+      "case": "support_23",
+      "file": "support_23.json",
+      "sha256": "7a567fe1b2a88cf26152e7dd19c5827725f1b50d5503aaa8bca9ec06ff8aa751",
+      "source": "oma-runs/beyondmimic-g1/.oma/experiments/exp-20261029-002/evaluation/heldout-protocols/support_23.json"
+    }
+  ]
+}

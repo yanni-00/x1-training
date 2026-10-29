@@ -1,0 +1,12 @@
+{
+  "mode": "native_dynamics_crosscheck",
+  "num_envs": 1,
+  "optimizer_updates": 0,
+  "seed": 1,
+  "source_saved_iteration": 3998,
+  "source_checkpoint_sha256": "77e2952364465f8ee989a233cec696f84b669ea61d2d6fbec18bd0ee6bbf4568",
+  "protocol_manifest": "configs/native_eval_protocols/manifest.json",
+  "behavior_gates": "configs/behavior_gates.json",
+  "artifact": "model_isaac_csv.pt",
+  "artifact_kind": "CSV/JSON diagnostic bundle, not trained weights"
+}
