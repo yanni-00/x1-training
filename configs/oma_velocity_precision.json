@@ -1,0 +1,22 @@
+{
+  "num_envs": 4096,
+  "iterations": 2000,
+  "save_interval": 500,
+  "seed": 1,
+  "run_name": "oma_walkstop_velocity_precision",
+  "source_saved_iteration": 1999,
+  "source_checkpoint_sha256": "8282d457d649f6cb2f190d2b13b474be5c8a7da8b9bc75f4b585c04bc7965551",
+  "environment_overrides": {
+    "rewards.motion_body_lin_vel.params.std": 0.5
+  },
+  "settings_kind": "Preregistered experimental reward tolerance and compute settings, not measured hardware or predicted gain",
+  "unchanged": [
+    "PPO",
+    "reward terms/weights except selected std",
+    "terminations",
+    "GO/STOP initialization and clock",
+    "reference data",
+    "behavior gates",
+    "evaluation protocols"
+  ]
+}

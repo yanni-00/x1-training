@@ -45,6 +45,8 @@ class MotionOnPolicyRunner(OnPolicyRunner):
         from whole_body_tracking.utils.oma_checkpoint import collect_runtime
         if not hasattr(self, "_oma_runtime"):
             self._oma_runtime = collect_runtime(self.env, self.alg.policy)
+            import json
+            print("[OMA] Resolved reward parameters: " + json.dumps(self._oma_runtime["reward_parameters"]), flush=True)
         infos = dict(infos or {})
         infos["oma_runtime"] = self._oma_runtime
         super().save(path, infos)

@@ -53,6 +53,14 @@ def collect_runtime(env, policy):
         "normalizer_epsilon": float(eps) if eps is not None else None,
         "actor_obs_normalization": bool(getattr(policy, "actor_obs_normalization", False)),
         "contact_force_threshold": float(base.scene["contact_forces"].cfg.force_threshold),
+        # Record resolved reward configuration, not just requested CLI values.
+        # This is provenance only; reward computation remains in native MDP.
+        "reward_parameters": {
+            "motion_body_lin_vel": {
+                "weight": float(base.cfg.rewards.motion_body_lin_vel.weight),
+                "std": float(base.cfg.rewards.motion_body_lin_vel.params["std"]),
+            },
+        },
         "reference_sha256": hashlib.sha256(Path(command.cfg.motion_file).read_bytes()).hexdigest(),
         "motion": motion, "control": control,
     }
