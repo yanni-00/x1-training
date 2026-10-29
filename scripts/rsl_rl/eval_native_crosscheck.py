@@ -134,6 +134,20 @@ def main(env_cfg, agent_cfg):
             motion.cfg.evaluation_start_support = protocol['initial_support_index']
             motion.request(False)
             observations, _ = raw.reset(seed=int(protocol['seed']))
+            # Native relative-body targets are filled by _update_command, but
+            # Lab checks terminations before the first regular command update.
+            # Initialise derived targets at static STOP without physics, clock
+            # advancement, robot-state writes or an unrecorded warm-up step.
+            initial_phase = motion.clock.phase.clone()
+            initial_rate = motion.clock.rate.clone()
+            initial_root = robot.data.root_state_w.clone()
+            initial_joints = robot.data.joint_pos.clone()
+            motion._update_command()
+            if not (torch.equal(initial_phase, motion.clock.phase) and torch.equal(initial_rate, motion.clock.rate)
+                    and torch.equal(initial_root, robot.data.root_state_w)
+                    and torch.equal(initial_joints, robot.data.joint_pos)):
+                raise RuntimeError('Derived-target initialization changed the physical state or reference clock')
+            observations = base.observation_manager.compute(update_history=False)
             obs = observations['policy']
             if tuple(obs.shape) != (1, 160):
                 raise ValueError('Invalid native policy observation shape')
@@ -145,11 +159,13 @@ def main(env_cfg, agent_cfg):
                         'body_names': list(robot.body_names), 'state_source': 'Isaac Lab actual state',
                         'contact_force_threshold_source': float(sensor.cfg.force_threshold),
                         'native_termination_terms': list(base.termination_manager.active_terms),
+                        'derived_target_initialization': 'Static STOP update; clock and physical state equality asserted; no warm-up physics step',
                         'automatic_reset_policy': 'Reset once per independent protocol, abort at first returned done; CSV is PRE-step.',
                         'video_requested': False, 'behavior_acceptance': False}
             completed = 0
             terminated = False
             reason = None
+            terminal_terms = {}
             with (target / 'joints.csv').open('w', newline='', encoding='utf-8') as stream:
                 writer = csv.writer(stream)
                 writer.writerow(header)
@@ -159,7 +175,9 @@ def main(env_cfg, agent_cfg):
                         raise ValueError('Protocol does not align to native control clock')
                     motion.request(bool(stage['go']))
                     for _ in range(count):
-                        with torch.inference_mode():
+                        # Manager buffers created during stepping must remain
+                        # normal tensors for later explicit protocol resets.
+                        with torch.no_grad():
                             action = actor(obs)
                             if not torch.isfinite(action).all():
                                 raise RuntimeError('Nonfinite native action')
@@ -177,11 +195,13 @@ def main(env_cfg, agent_cfg):
                                     *flat(motion.joint_pos[0]), *flat(motion.joint_vel[0]), *flat(action[0])]
                             row += [float((motion.anchor_pos_w - motion.robot_anchor_pos_w).norm()),
                                     float(squared_velocity.sqrt()), float(torch.exp(-squared_velocity / reward_std ** 2))]
-                            observations, _, done, truncated, _ = raw.step(action)
+                            observations, _, done, truncated, extras = raw.step(action)
                             obs = observations['policy']
                             terminated = bool(done[0] or truncated[0])
                             if terminated:
                                 reason = 'native_environment_termination'
+                                terminal_terms = {k: float(v) for k, v in extras.get('log', {}).items()
+                                                  if k.startswith('Episode_Termination/')}
                             elif float(robot.data.root_pos_w[0, 2]) < protocol['abort_pelvis_height_m']:
                                 terminated = True
                                 reason = 'pelvis_height_abort'
@@ -197,11 +217,12 @@ def main(env_cfg, agent_cfg):
                     if terminated:
                         break
             manifest.update(completed_steps=completed, completed_protocol=completed == planned and not terminated,
-                            terminated=terminated, termination_reason=reason)
+                            terminated=terminated, termination_reason=reason, terminal_terms=terminal_terms)
             (target / 'evaluation_manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
             metrics = score(target, gates)
             (target / 'metrics.json').write_text(json.dumps(metrics, indent=2) + '\n')
             entry = {'case': case_name, 'completed': manifest['completed_protocol'],
+                     'termination_reason': reason, 'terminal_terms': terminal_terms,
                      'quantitative_pass': metrics['quantitative_pass'], 'stage_metrics': metrics['stage_metrics'],
                      'stage_gates': metrics['quantitative_gate_checks']}
             results.append(entry)
