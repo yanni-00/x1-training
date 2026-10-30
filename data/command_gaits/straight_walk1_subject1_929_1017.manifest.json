@@ -1,0 +1,258 @@
+{
+  "scope": "Prepared kinematic CSV only; exact native FK and dynamic training/play still required",
+  "source": {
+    "filename": "walk1_subject1.csv",
+    "source_sha256": "68c7887438e94f1f3d9ebacd3a8ce59251a22c7b05129a0f5d7cacaedc48c28d",
+    "window_index": 3,
+    "start_frame": 929,
+    "end_frame": 1017,
+    "input_fps": 30,
+    "duration_s": 2.933333333333333,
+    "forward_stride_m": 1.9554595762557692,
+    "lateral_stride_m": -0.0025296631174798975,
+    "natural_forward_speed_mps": 0.6666339464508304,
+    "net_yaw_rad": 0.01958565699240844,
+    "straightness_ratio": 0.997150850006575,
+    "joint_seam_max_rad": 0.129332,
+    "joint_seam_rms_rad": 0.04668092704476445,
+    "joint_velocity_seam_rms_radps": 0.794619725384847,
+    "foot_local_seam_max_m": 0.05253093034885838,
+    "left_and_right_swing_observed": true,
+    "same_fore_aft_foot_order": true,
+    "kinematic_support_only": true,
+    "dynamic_feasibility_verified": false,
+    "selection_score": 0.09727188493616663
+  },
+  "source_period_s": 2.933333333333333,
+  "output_period_s": 2.94,
+  "period_quantization_rule": "Nearest integer number of existing50Hz policy steps",
+  "output_fps": 50,
+  "cycle_intervals": 147,
+  "rows_including_duplicate_endpoint": 148,
+  "root_forward_stride_m": 1.9554595762557692,
+  "nominal_reference_speed_mps": 0.6651223048489011,
+  "source_joint_fit_max_rad": 0.064666,
+  "source_joint_fit_rms_rad": 0.0034988834091754886,
+  "analytic_joint_position_seam_max_rad": 0.0,
+  "analytic_joint_velocity_seam_max_radps": 0.0,
+  "analytic_joint_acceleration_seam_max_radps2": 0.0,
+  "root_yaw_residual_max_rad": 0.1556292790747679,
+  "straight_root_y_exact": true,
+  "joint_limit_checks": {
+    "left_hip_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.5612760375174568,
+      "max_rad": 0.19985176578645444,
+      "urdf_lower_rad": -2.5307,
+      "urdf_upper_rad": 2.8798
+    },
+    "left_hip_roll_joint": {
+      "passed": true,
+      "min_rad": -0.2501835850829089,
+      "max_rad": 0.18443678720862364,
+      "urdf_lower_rad": -0.5236,
+      "urdf_upper_rad": 2.9671
+    },
+    "left_hip_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.16704240397254197,
+      "max_rad": 0.11594263273016767,
+      "urdf_lower_rad": -2.7576,
+      "urdf_upper_rad": 2.7576
+    },
+    "left_knee_joint": {
+      "passed": true,
+      "min_rad": 0.1805801682544815,
+      "max_rad": 1.2718863579621495,
+      "urdf_lower_rad": -0.087267,
+      "urdf_upper_rad": 2.8798
+    },
+    "left_ankle_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.2742238313534745,
+      "max_rad": 0.2609175595691657,
+      "urdf_lower_rad": -0.87267,
+      "urdf_upper_rad": 0.5236
+    },
+    "left_ankle_roll_joint": {
+      "passed": true,
+      "min_rad": -0.25179471472125947,
+      "max_rad": 0.09681491277305794,
+      "urdf_lower_rad": -0.2618,
+      "urdf_upper_rad": 0.2618
+    },
+    "right_hip_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.5490693396203764,
+      "max_rad": 0.2118883500107479,
+      "urdf_lower_rad": -2.5307,
+      "urdf_upper_rad": 2.8798
+    },
+    "right_hip_roll_joint": {
+      "passed": true,
+      "min_rad": -0.21805133705793972,
+      "max_rad": 0.20450469012519037,
+      "urdf_lower_rad": -2.9671,
+      "urdf_upper_rad": 0.5236
+    },
+    "right_hip_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.28508137134321243,
+      "max_rad": 0.011272173554137241,
+      "urdf_lower_rad": -2.7576,
+      "urdf_upper_rad": 2.7576
+    },
+    "right_knee_joint": {
+      "passed": true,
+      "min_rad": 0.17454553397333597,
+      "max_rad": 1.2746770866918435,
+      "urdf_lower_rad": -0.087267,
+      "urdf_upper_rad": 2.8798
+    },
+    "right_ankle_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.3548345488369395,
+      "max_rad": 0.32863765242485565,
+      "urdf_lower_rad": -0.87267,
+      "urdf_upper_rad": 0.5236
+    },
+    "right_ankle_roll_joint": {
+      "passed": true,
+      "min_rad": -0.08765436652782695,
+      "max_rad": 0.24897497945293476,
+      "urdf_lower_rad": -0.2618,
+      "urdf_upper_rad": 0.2618
+    },
+    "waist_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.09720439135158404,
+      "max_rad": 0.08107166970094826,
+      "urdf_lower_rad": -2.618,
+      "urdf_upper_rad": 2.618
+    },
+    "waist_roll_joint": {
+      "passed": true,
+      "min_rad": -0.1025749997468138,
+      "max_rad": 0.10745854595528533,
+      "urdf_lower_rad": -0.52,
+      "urdf_upper_rad": 0.52
+    },
+    "waist_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.021301677779080867,
+      "max_rad": 0.021095710232071217,
+      "urdf_lower_rad": -0.52,
+      "urdf_upper_rad": 0.52
+    },
+    "left_shoulder_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.21609007610912187,
+      "max_rad": 0.18424544169746568,
+      "urdf_lower_rad": -3.0892,
+      "urdf_upper_rad": 2.6704
+    },
+    "left_shoulder_roll_joint": {
+      "passed": true,
+      "min_rad": 0.02406321753931761,
+      "max_rad": 0.2846596006024269,
+      "urdf_lower_rad": -1.5882,
+      "urdf_upper_rad": 2.2515
+    },
+    "left_shoulder_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.5263854330627099,
+      "max_rad": -0.15943333263754747,
+      "urdf_lower_rad": -2.618,
+      "urdf_upper_rad": 2.618
+    },
+    "left_elbow_joint": {
+      "passed": true,
+      "min_rad": 0.7884890306141757,
+      "max_rad": 1.0619260168031848,
+      "urdf_lower_rad": -1.0472,
+      "urdf_upper_rad": 2.0944
+    },
+    "left_wrist_roll_joint": {
+      "passed": true,
+      "min_rad": 0.6847518458360488,
+      "max_rad": 0.9641290356288023,
+      "urdf_lower_rad": -1.972222054,
+      "urdf_upper_rad": 1.972222054
+    },
+    "left_wrist_pitch_joint": {
+      "passed": true,
+      "min_rad": 0.02012587082008188,
+      "max_rad": 0.24838957037469894,
+      "urdf_lower_rad": -1.614429558,
+      "urdf_upper_rad": 1.614429558
+    },
+    "left_wrist_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.008421728441286632,
+      "max_rad": 0.3564178133889915,
+      "urdf_lower_rad": -1.614429558,
+      "urdf_upper_rad": 1.614429558
+    },
+    "right_shoulder_pitch_joint": {
+      "passed": true,
+      "min_rad": -0.057793891015571995,
+      "max_rad": 0.2387818854953371,
+      "urdf_lower_rad": -3.0892,
+      "urdf_upper_rad": 2.6704
+    },
+    "right_shoulder_roll_joint": {
+      "passed": true,
+      "min_rad": -0.20868297059955748,
+      "max_rad": -0.017780721967909325,
+      "urdf_lower_rad": -2.2515,
+      "urdf_upper_rad": 1.5882
+    },
+    "right_shoulder_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.01801518257970581,
+      "max_rad": 0.24932571046241467,
+      "urdf_lower_rad": -2.618,
+      "urdf_upper_rad": 2.618
+    },
+    "right_elbow_joint": {
+      "passed": true,
+      "min_rad": 0.7320497087060078,
+      "max_rad": 0.8991895281347724,
+      "urdf_lower_rad": -1.0472,
+      "urdf_upper_rad": 2.0944
+    },
+    "right_wrist_roll_joint": {
+      "passed": true,
+      "min_rad": -0.9067498179797364,
+      "max_rad": -0.7650066044517555,
+      "urdf_lower_rad": -1.972222054,
+      "urdf_upper_rad": 1.972222054
+    },
+    "right_wrist_pitch_joint": {
+      "passed": true,
+      "min_rad": 0.05859431163102868,
+      "max_rad": 0.2005518988038094,
+      "urdf_lower_rad": -1.614429558,
+      "urdf_upper_rad": 1.614429558
+    },
+    "right_wrist_yaw_joint": {
+      "passed": true,
+      "min_rad": -0.17154915198932147,
+      "max_rad": 0.043233220754854536,
+      "urdf_lower_rad": -1.614429558,
+      "urdf_upper_rad": 1.614429558
+    }
+  },
+  "all_joint_limits_pass": true,
+  "urdf_sha256": "dbc8471004e9b0b85c27a4ebc1f0d90a727c1cf7ca9ef507b805596f2004d64b",
+  "selection_sha256": "88cc5cc7e247ef572c26d88686c59f7b0b22fb86aed1ca1c4cb0318d3b50cfc1",
+  "dynamic_feasibility_verified": false,
+  "native_fk_recomputed": false,
+  "behavior_acceptance": false,
+  "remaining": [
+    "Recompute exact native G1 FK; validate body/foot seams and support",
+    "Command-conditioned cyclic phase and support-aware braking",
+    "Native PPO new-task run and actual command-tracking CSV/video"
+  ],
+  "output_sha256": "5125e56e76a114fcc6430fb85fe5ef3fffc24409eaa682e3c2e4a4c33d299785"
+}

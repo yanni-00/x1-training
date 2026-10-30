@@ -1,0 +1,21 @@
+{
+  "format": "beyondmimic_velocity_gait_candidate_v1",
+  "csv": "straight_walk1_subject1_929_1017.csv",
+  "csv_sha256": "5125e56e76a114fcc6430fb85fe5ef3fffc24409eaa682e3c2e4a4c33d299785",
+  "input_fps": 50,
+  "cycle_intervals": 147,
+  "duplicate_endpoint": true,
+  "nominal_reference_speed_mps": 0.6651223048489011,
+  "mujoco_support_frames": [
+    38,
+    72,
+    107,
+    109,
+    145
+  ],
+  "native_fk_recomputed": false,
+  "dynamic_feasibility_verified": false,
+  "behavior_acceptance": false,
+  "source_manifest": "straight_walk1_subject1_929_1017.manifest.json",
+  "readinessScope": "MuJoCo kinematic candidate only; native FK validates/recomputes support before training"
+}
