@@ -1,0 +1,57 @@
+{
+  "design_id": "design-beyondmimic-g1-002",
+  "functional_unit": "command-root/cyclic-human-reference/native-task/runtime/play",
+  "phase": "contact_quality_challenger",
+  "robot": "G1-29DOF",
+  "task": "Tracking-VelocityReference-G1-v0",
+  "num_envs": 4096,
+  "max_iterations": 2000,
+  "save_interval": 250,
+  "seed": 1,
+  "initialization": "explicit_native_resume_from_owner_accepted_exp003_final",
+  "actor_observation_dim": 160,
+  "critic_observation_dim": 286,
+  "action_dim": 29,
+  "gait": "data/command_gaits/selected_gait.json",
+  "gait_csv_sha256": "5125e56e76a114fcc6430fb85fe5ef3fffc24409eaa682e3c2e4a4c33d299785",
+  "speed_scale_range": [
+    0.5,
+    1
+  ],
+  "phase_acceleration": 2,
+  "initial_go_probability": 0.5,
+  "go_duration_range_s": [
+    4,
+    12
+  ],
+  "stop_duration_range_s": [
+    2,
+    4
+  ],
+  "unsupported_axes": [
+    "lateral",
+    "backward",
+    "in_place_turn"
+  ],
+  "main_goal_complete": false,
+  "behavior_gates": "configs/velocity_turn_gates.json",
+  "evaluation_protocol": "configs/eval_velocity_turn.json",
+  "preserved": "Identical gait/source, native160/286 network/normalizers/control/reward/physical constraints/PPO; only command domain/curriculum expands",
+  "native_audit_required_before_PPO": true,
+  "episode_length_s": 20,
+  "comparison_scope": "One new contact-gated body-planar-speed reward; all other learning/reference/control/curriculum variables unchanged",
+  "yaw_rate_range_radps": [
+    -0.2,
+    0.2
+  ],
+  "straight_go_probability": 0.5,
+  "parent_checkpoint_sha256": "db5e3fe009373417717e71155be7be5d706d8ab937b538477de5f424d630608c",
+  "parent_saved_iteration": 3998,
+  "regression_protocol": "configs/eval_velocity_command.json",
+  "regression_gates": "configs/velocity_behavior_gates.json",
+  "feet_contact_planar_speed_weight": -0.2,
+  "contact_threshold_source": "Existing scene.contact_forces.force_threshold=10N",
+  "owner_accepted_baseline": "g1_joystick_20261030_exp003",
+  "promotion_policy": "D:/工作资料/02机器人/01F1项目/oma-runs/beyondmimic-g1/.oma/baselines/g1_joystick_20261030_exp003/comparison-policy.json",
+  "quality_gates": "quality-comparison-gates.json"
+}

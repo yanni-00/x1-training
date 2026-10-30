@@ -157,7 +157,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             from whole_body_tracking.utils.oma_checkpoint import collect_runtime, validate_runtime_continuation
             parent=torch.load(resume_path,map_location='cpu',weights_only=True)['infos']['oma_runtime']
             current=collect_runtime(env,runner.alg.policy)
-            validate_runtime_continuation(parent,current)
+            import json
+            authorized=json.loads(os.environ.get('OMA_VELOCITY_REWARD_DELTA','{}'))
+            validate_runtime_continuation(parent,current,authorized)
+            if authorized:print('[OMA] Explicit resolved continuation reward delta: '+json.dumps(authorized),flush=True)
             runner._oma_runtime=current
             print('[OMA] Actual continuation environment/reference/control match verified',flush=True)
 

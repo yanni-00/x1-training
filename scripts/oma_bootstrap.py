@@ -53,7 +53,17 @@ def main():
                    help='Evaluate the supplied fixed checkpoint; no PPO updates or environment installation')
     p.add_argument('--velocity_reference',action='store_true',help='[OMA] New command-root/cyclic reference task; clean PPO, not legacy resume')
     p.add_argument('--velocity_resume',action='store_true',help='[OMA] Explicit compatible velocity-task continuation with exact reference/architecture guards')
+    p.add_argument('--velocity_feet_contact_penalty',type=float,default=None,
+                   help='[OMA] Explicitly authorize the one preregistered added foot-contact cost; must match native resolved weight')
     args,extra=p.parse_known_args()
+    if args.velocity_feet_contact_penalty is not None:
+        import math
+        if not args.velocity_resume or not math.isfinite(args.velocity_feet_contact_penalty) or args.velocity_feet_contact_penalty>=0:
+            raise ValueError('Contact-cost delta requires explicit compatible resume and finite negative weight')
+        os.environ['OMA_VELOCITY_REWARD_DELTA']=json.dumps({'feet_contact_planar_speed':{
+            'weight':args.velocity_feet_contact_penalty,'force_threshold':10.0,
+            'statistic':'sum_current_contact_body_planar_speed_norm',
+            'body_names':['left_ankle_roll_link','right_ankle_roll_link']}})
     if args.velocity_resume and not (args.velocity_reference and args.gm_resume_url):
         raise ValueError('Velocity resume requires explicit velocity task and parent URL/checksum')
     if args.velocity_reference and (args.native_crosscheck or (args.gm_resume_url and not args.velocity_resume)):

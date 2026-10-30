@@ -80,3 +80,13 @@ def feet_contact_time(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, thresh
     last_contact_time = contact_sensor.data.last_contact_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_contact_time < threshold) * first_air, dim=-1)
     return reward
+
+
+def feet_contact_planar_speed(env, sensor_cfg: SceneEntityCfg, asset_cfg: SceneEntityCfg,
+                              force_threshold: float) -> torch.Tensor:
+    """[OMA] exp004: symmetric current-contact speed proxy, no post-lift force history."""
+    from whole_body_tracking.utils.contact_quality import contact_planar_speed_cost
+    sensor=env.scene.sensors[sensor_cfg.name]
+    asset=env.scene[asset_cfg.name]
+    return contact_planar_speed_cost(sensor.data.net_forces_w[:,sensor_cfg.body_ids,:],
+                                    asset.data.body_lin_vel_w[:,asset_cfg.body_ids,:],force_threshold)

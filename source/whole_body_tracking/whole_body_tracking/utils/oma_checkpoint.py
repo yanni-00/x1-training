@@ -51,6 +51,16 @@ def collect_runtime(env, policy):
         raise RuntimeError("Non-finite runtime reference")
     if len(body_names) != motion["body_pos_w"].shape[1]:
         raise RuntimeError("Checkpoint reference body order mismatch")
+    reward_parameters={'motion_body_lin_vel':{
+        'weight':float(base.cfg.rewards.motion_body_lin_vel.weight),
+        'std':float(base.cfg.rewards.motion_body_lin_vel.params['std'])}}
+    foot_term=getattr(base.cfg.rewards,'feet_contact_planar_speed',None)
+    if foot_term is not None and foot_term.weight != 0:
+        reward_parameters['feet_contact_planar_speed']={
+            'weight':float(foot_term.weight),'force_threshold':float(foot_term.params['force_threshold']),
+            'statistic':'sum_current_contact_body_planar_speed_norm',
+            'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+    velocity_metadata['authorized_reward_delta']=json.loads(os.environ.get('OMA_VELOCITY_REWARD_DELTA','{}'))
     action = base.action_manager.get_term("joint_pos")
     scale = action._scale
     scale = scale[0].detach().cpu().clone() if isinstance(scale, torch.Tensor) else torch.full((29,), float(scale))
@@ -83,23 +93,23 @@ def collect_runtime(env, policy):
         "contact_force_threshold": float(base.scene["contact_forces"].cfg.force_threshold),
         # Record resolved reward configuration, not just requested CLI values.
         # This is provenance only; reward computation remains in native MDP.
-        "reward_parameters": {
-            "motion_body_lin_vel": {
-                "weight": float(base.cfg.rewards.motion_body_lin_vel.weight),
-                "std": float(base.cfg.rewards.motion_body_lin_vel.params["std"]),
-            },
-        },
+        "reward_parameters":reward_parameters,
         "reference_sha256": hashlib.sha256(Path(command.cfg.motion_file).read_bytes()).hexdigest(),
         "motion": motion, "control": control,
     }
 
 
-def validate_runtime_continuation(parent, current):
+def validate_runtime_continuation(parent, current, allowed_reward_delta=None):
     """Require the actual new environment interface/control to match its parent."""
     for key in ['format','reference_sha256','joint_names','body_names','tracked_body_names',
                 'anchor_body_name','physics_dt','decimation','policy_dt','phase_acceleration',
-                'normalizer_epsilon','actor_obs_normalization','reward_parameters']:
+                'normalizer_epsilon','actor_obs_normalization']:
         if parent[key] != current[key]:raise RuntimeError('Continuation runtime differs: '+key)
+    previous=dict(parent['reward_parameters']);resolved=dict(current['reward_parameters'])
+    for key,expected in (allowed_reward_delta or {}).items():
+        if key!='feet_contact_planar_speed' or key in previous or resolved.pop(key,None)!=expected:
+            raise RuntimeError('Unauthorized or mismatched continuation reward delta: '+key)
+    if previous!=resolved:raise RuntimeError('Continuation runtime differs: reward_parameters')
     for key,old in parent['control'].items():
         if not torch.equal(old.cpu(),current['control'][key].cpu()):
             raise RuntimeError('Continuation native control differs: '+key)
