@@ -31,7 +31,7 @@ def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--checkpoint-path', required=True)
     parser.add_argument('--output-dir', required=True)
-    parser.add_argument('--protocol', choices=('sampled', 'height_only', 'upright'), default='upright')
+    parser.add_argument('--protocol', choices=('sampled', 'height_only', 'upright', 'upright_reference'), default='upright')
     parser.add_argument('--eval-envs', type=int, default=16)  # smoke_r20.py
     parser.add_argument('--eval-steps', type=int, default=1000)  # play_diag.py
     parser.add_argument('--record-video', action='store_true')
@@ -87,7 +87,7 @@ def main():
                 [0.5, 0.0, 0.0], device=self.device)  # existing walk gate
             if custom.protocol == 'height_only':
                 self.commands[env_ids, 7] = 0.0
-            if custom.protocol == 'upright':
+            if custom.protocol in ('upright', 'upright_reference'):
                 self.commands[env_ids, 3] = self.command_ranges['gait_frequency'][0]
                 self.commands[env_ids, 4:6] = 0.5  # H1 sampler: walk, half-cycle stance
                 self.commands[env_ids, 6] = self.command_ranges['foot_swing_height'][0]
@@ -100,6 +100,9 @@ def main():
 
     task_registry.task_classes[args.task] = EvaluationRobot
     env, _ = task_registry.make_env(args.task, args=args, env_cfg=cfg)
+    reference=env.reference_controller_metadata() if hasattr(env,'reference_controller_metadata') else None
+    if (custom.protocol == 'upright_reference') != bool(reference and reference['active']):
+        raise ValueError('Reference-arm controller requires the explicit hybrid evaluation protocol')
     train_cfg.runner.resume = True
     train_cfg.runner.resume_path = str(checkpoint)
     runner, _ = task_registry.make_alg_runner(
@@ -129,6 +132,8 @@ def main():
         frame_dir.mkdir(exist_ok=True)
     video_frames = 0
     for step in range(custom.eval_steps):
+        if reference and (env.use_disturb or env.disturb_masks.any() or env.interrupt_mask.any()):
+            raise RuntimeError('Hybrid evaluation cannot suppress contact termination or reward masks')
         commands_used = env.commands.clone()
         with torch.inference_mode():
             actions, _ = policy.act_inference(obs, privileged_obs=critic_obs)
@@ -169,11 +174,13 @@ def main():
     summary = {
         'checkpoint': str(checkpoint),
         'checkpoint_sha256': hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
-        'task': args.task, 'protocol': custom.protocol, 'protocol_version': 2, 'seed': cfg.seed,
+        'task': args.task, 'protocol': custom.protocol, 'protocol_version': 3 if reference else 2, 'seed': cfg.seed,
         'dt': env.dt, 'requested_steps': custom.eval_steps, 'envs': env.num_envs,
         'base_height_target': cfg.rewards.base_height_target,
         'disabled_randomizations': disabled_randomizations,
-        'interventions_enabled': env.use_disturb,
+        'interventions_enabled': bool(env.use_disturb or reference),
+        'legacy_disturbances_enabled': bool(env.use_disturb),
+        'reference_controller': reference,
         'nontermination_ratio': (~failed).float().mean().item(), 'per_env': []}
     col = {name: i for i, name in enumerate(columns)}
     steady = data[(data[:, col['step']] >= 200) & (data[:, col['valid']] == 1)]
