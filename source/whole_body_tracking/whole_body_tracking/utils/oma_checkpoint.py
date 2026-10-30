@@ -1,5 +1,6 @@
 """[OMA] Exact motion/control state needed by the existing MuJoCo play path."""
 import hashlib
+import json
 from pathlib import Path
 import numpy as np
 import torch
@@ -10,12 +11,25 @@ def collect_runtime(env, policy):
     command = base.command_manager.get_term("motion")
     robot = command.robot
     data = robot.data
+    velocity_mode = hasattr(command, 'reference')
+    velocity_metadata = {}
     with np.load(command.cfg.motion_file, allow_pickle=False) as source:
         joint_names = source["joint_names"].tolist()
         body_names = source["body_names"].tolist()
         motion = {key: torch.from_numpy(source[key].copy()) for key in
                   ["fps", "joint_pos", "joint_vel", "body_pos_w", "body_quat_w",
                    "body_lin_vel_w", "body_ang_vel_w", "support_frames"]}
+        if velocity_mode:
+            for key in ['cycle_frames', 'nominal_reference_speed_mps']:
+                motion[key] = torch.from_numpy(source[key].copy())
+            velocity_metadata = {
+                'reference_space':str(source['reference_space']),
+                'source_csv_sha256':str(source['source_csv_sha256']),
+                'command_limits':[list(value) for value in command.command_limits],
+                'supported_command_scope':'forward_speed_and_stable_stop_integration_only',
+                'main_joystick_goal_accepted':False,
+                'native_gait_audit':json.loads(Path(command.cfg.motion_file).with_suffix('.native-audit.json').read_text()),
+            }
     if joint_names != list(robot.joint_names):
         raise RuntimeError("Checkpoint reference/articulation joint order mismatch")
     if motion["joint_pos"].shape[1] != 29 or len(joint_names) != 29:
@@ -43,7 +57,8 @@ def collect_runtime(env, policy):
     normalizer = getattr(policy, "actor_obs_normalizer", None)
     eps = getattr(normalizer, "eps", None)
     return {
-        "format": "beyondmimic_g1_runtime_v1",
+        "format": "beyondmimic_g1_velocity_runtime_v1" if velocity_mode else "beyondmimic_g1_runtime_v1",
+        **velocity_metadata,
         "joint_names": joint_names, "body_names": body_names,
         "tracked_body_names": list(command.cfg.body_names),
         "anchor_body_name": command.cfg.anchor_body_name,

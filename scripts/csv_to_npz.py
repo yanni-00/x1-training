@@ -17,6 +17,7 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Replay motion from csv file and output to npz file.")
 parser.add_argument("--input_file", type=str, required=True, help="The path to the input motion csv file.")
+parser.add_argument("--include_endpoint", action="store_true", help="[OMA] Exact same-FPS cyclic FK including duplicated endpoint.")
 parser.add_argument("--input_fps", type=int, default=30, help="The fps of the input motion.")
 parser.add_argument(
     "--frame_range",
@@ -125,6 +126,15 @@ class MotionLoader:
 
     def _interpolate_motion(self):
         """Interpolates the motion to the output fps."""
+        if args_cli.include_endpoint:
+            if self.input_fps != self.output_fps:
+                raise ValueError('Cyclic endpoint FK requires identical input/output FPS')
+            # [OMA] Avoid floating arange endpoint ambiguity and interpolation drift.
+            self.output_frames = self.input_frames
+            self.motion_base_poss = self.motion_base_poss_input.clone()
+            self.motion_base_rots = self.motion_base_rots_input.clone()
+            self.motion_dof_poss = self.motion_dof_poss_input.clone()
+            return
         times = torch.arange(0, self.duration, self.output_dt, device=self.device, dtype=torch.float32)
         self.output_frames = times.shape[0]
         index_0, index_1, blend = self._compute_frame_blend(times)

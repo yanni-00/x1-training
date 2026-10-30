@@ -49,3 +49,13 @@ gym.register(
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:G1FlatPPORunnerCfg",
     },
 )
+
+# [OMA] Physical velocity command plus cyclic human gait, separate from legacy replay.
+from .velocity_env_cfg import G1VelocityReferenceEnvCfg
+gym.register(
+    id="Tracking-VelocityReference-G1-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={"env_cfg_entry_point":G1VelocityReferenceEnvCfg,
+            "rsl_rl_cfg_entry_point":f"{agents.__name__}.rsl_rl_ppo_cfg:G1FlatPPORunnerCfg"},
+)

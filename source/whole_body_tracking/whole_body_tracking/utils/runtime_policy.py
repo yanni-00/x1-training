@@ -9,7 +9,7 @@ class RuntimeActor(nn.Module):
         super().__init__()
         state = checkpoint["model_state_dict"]
         runtime = checkpoint["infos"]["oma_runtime"]
-        if runtime["format"] != "beyondmimic_g1_runtime_v1":
+        if runtime["format"] not in {"beyondmimic_g1_runtime_v1", "beyondmimic_g1_velocity_runtime_v1"}:
             raise ValueError("Unsupported runtime model schema")
         ids = sorted(int(k.split(".")[1]) for k in state if re.fullmatch(r"actor\.\d+\.weight", k))
         layers = []

@@ -17,7 +17,10 @@ def main():
     p.add_argument('--gm_resume_url');p.add_argument('--checkpoint_sha256')
     p.add_argument('--native_crosscheck', action='store_true',
                    help='Evaluate the supplied fixed checkpoint; no PPO updates or environment installation')
+    p.add_argument('--velocity_reference',action='store_true',help='[OMA] New command-root/cyclic reference task; clean PPO, not legacy resume')
     args,extra=p.parse_known_args()
+    if args.velocity_reference and (args.gm_resume_url or args.native_crosscheck):
+        raise ValueError('New reference task requires clean PPO; no implicit legacy checkpoint migration')
     if args.native_crosscheck and not args.gm_resume_url:
         raise ValueError('Native crosscheck requires the already authorized source checkpoint')
     if min(args.num_envs,args.iterations,args.save_interval)<=0:raise ValueError('Training sizes must be positive')
@@ -50,28 +53,48 @@ def main():
         if not asset.is_file() or hashlib.sha256(asset.read_bytes()).hexdigest()!=item['sha256']:
             raise RuntimeError('Frozen robot asset missing or changed: '+item['path'])
     print('[OMA] Frozen G1 robot assets verified; no live asset fetch required',flush=True)
-    csv=ROOT/'data/raw/walk2_subject1.csv'
-    if hashlib.sha256(csv.read_bytes()).hexdigest()!=CSV_SHA:raise RuntimeError('Starter motion checksum mismatch')
-    generated=ROOT/'data/generated';generated.mkdir(parents=True,exist_ok=True)
-    converted=generated/'walk2_subject1.npz';labeled=generated/'walk2_subject1_walkstop.npz'
-    print('[OMA] Stage: exact-articulation FK reference conversion',flush=True)
-    cmd=[sys.executable,str(ROOT/'scripts/csv_to_npz.py'),'--input_file',str(csv),'--input_fps','30','--output_fps','50','--output_name','oma_walk2_subject1','--output_file',str(converted)]
-    if args.headless:cmd.append('--headless')
-    subprocess.run(cmd,check=True)
-    if not converted.is_file():
-        raise RuntimeError("FK worker returned without the required reference NPZ")
-    import numpy as np
-    with np.load(converted,allow_pickle=False) as data:
-        required=["joint_pos","joint_vel","body_pos_w","body_quat_w","body_lin_vel_w","body_ang_vel_w"]
-        if any(not np.isfinite(data[key]).all() for key in required):
-            raise RuntimeError("Non-finite FK reference")
-        if data["joint_pos"].shape[1]!=29 or data["joint_vel"].shape!=data["joint_pos"].shape:
-            raise RuntimeError("FK joint dimensions are incompatible")
-    print("[OMA] FK worker exited and reference arrays validated",flush=True)
-    subprocess.run([sys.executable,str(ROOT/'scripts/prepare_walkstop_motion.py'),'--input',str(converted),'--output',str(labeled)],check=True)
+    if args.velocity_reference:
+        os.environ['OMA_CHECKPOINT_UPLOAD_WAIT_S']='120'
+        selected_path=ROOT/'data/command_gaits/selected_gait.json'
+        selected=json.loads(selected_path.read_text())
+        csv=selected_path.parent/selected['csv']
+        if hashlib.sha256(csv.read_bytes()).hexdigest()!=selected['csv_sha256']:
+            raise RuntimeError('Selected command gait checksum mismatch')
+        generated=ROOT/'data/generated';generated.mkdir(parents=True,exist_ok=True)
+        converted=generated/'velocity_gait_native_fk.npz';labeled=generated/'velocity_gait.npz'
+        print('[OMA] Stage: fresh native FK of prepared cyclic reference, including endpoint',flush=True)
+        cmd=[sys.executable,str(ROOT/'scripts/csv_to_npz.py'),'--input_file',str(csv),
+             '--input_fps',str(selected['input_fps']),'--output_fps',str(selected['input_fps']),
+             '--output_name','oma_velocity_gait','--output_file',str(converted),'--include_endpoint']
+        if args.headless:cmd.append('--headless')
+        subprocess.run(cmd,check=True)
+        if not converted.is_file():raise RuntimeError('Native cyclic FK worker produced no NPZ')
+        subprocess.run([sys.executable,str(ROOT/'scripts/prepare_velocity_gait.py'),'--input',str(converted),
+                        '--selected',str(selected_path),'--output',str(labeled)],check=True)
+        print('[OMA] Stage: NEW command-conditioned native PPO; no old optimizer/weights',flush=True)
+    else:
+        csv=ROOT/'data/raw/walk2_subject1.csv'
+        if hashlib.sha256(csv.read_bytes()).hexdigest()!=CSV_SHA:raise RuntimeError('Starter motion checksum mismatch')
+        generated=ROOT/'data/generated';generated.mkdir(parents=True,exist_ok=True)
+        converted=generated/'walk2_subject1.npz';labeled=generated/'walk2_subject1_walkstop.npz'
+        print('[OMA] Stage: exact-articulation FK reference conversion',flush=True)
+        cmd=[sys.executable,str(ROOT/'scripts/csv_to_npz.py'),'--input_file',str(csv),'--input_fps','30','--output_fps','50','--output_name','oma_walk2_subject1','--output_file',str(converted)]
+        if args.headless:cmd.append('--headless')
+        subprocess.run(cmd,check=True)
+        if not converted.is_file():
+            raise RuntimeError("FK worker returned without the required reference NPZ")
+        import numpy as np
+        with np.load(converted,allow_pickle=False) as data:
+            required=["joint_pos","joint_vel","body_pos_w","body_quat_w","body_lin_vel_w","body_ang_vel_w"]
+            if any(not np.isfinite(data[key]).all() for key in required):
+                raise RuntimeError("Non-finite FK reference")
+            if data["joint_pos"].shape[1]!=29 or data["joint_vel"].shape!=data["joint_pos"].shape:
+                raise RuntimeError("FK joint dimensions are incompatible")
+        print("[OMA] FK worker exited and reference arrays validated",flush=True)
+        subprocess.run([sys.executable,str(ROOT/'scripts/prepare_walkstop_motion.py'),'--input',str(converted),'--output',str(labeled)],check=True)
     print('[OMA] Stage: fixed-weight native evaluation' if args.native_crosscheck else '[OMA] Stage: native BeyondMimic PPO walk/hold/resume training',flush=True)
     train=ROOT/'scripts/rsl_rl/train.py'
-    argv=[sys.executable,str(train),'--task','Tracking-WalkStop-G1-v0','--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
+    argv=[sys.executable,str(train),'--task',('Tracking-VelocityReference-G1-v0' if args.velocity_reference else 'Tracking-WalkStop-G1-v0'),'--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
     if args.headless:argv.append('--headless')
     if args.gm_resume_url:
         # Match the native agent's actual experiment_name (g1_flat), not the

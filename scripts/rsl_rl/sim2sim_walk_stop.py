@@ -50,6 +50,9 @@ def main():
     module = ROOT/"source/whole_body_tracking/whole_body_tracking"
     actor = load_module("runtime_policy",module/"utils/runtime_policy.py").RuntimeActor(checkpoint).eval()
     Clock = load_module("reference_clock",module/"tasks/tracking/mdp/reference_clock.py").SupportPhaseClock
+    velocity_mode = runtime['format'] == 'beyondmimic_g1_velocity_runtime_v1'
+    if not velocity_mode and runtime['format'] != 'beyondmimic_g1_runtime_v1':
+        raise ValueError('Unsupported motion runtime schema')
     motion = {k:v.cpu().numpy() for k,v in runtime["motion"].items()}
     control = {k:v.cpu().numpy() for k,v in runtime["control"].items()}
     names = runtime["joint_names"];body_names = runtime["body_names"]
@@ -60,10 +63,25 @@ def main():
     if any(n<=0 or abs(n*dt-s["duration_s"])>1e-7 for n,s in zip(counts,protocol["stages"])):
         raise ValueError("Protocol duration is not aligned to policy time")
     total = sum(counts)
-    clock = Clock(1,1/dt,motion["support_frames"],acceleration=runtime["phase_acceleration"])
+    reference = None
+    if velocity_mode:
+        # Import dependency-light shared engine without executing Isaac task registration.
+        import types, importlib
+        namespace=types.ModuleType('oma_reference');namespace.__path__=[str(module/'utils')]
+        sys.modules['oma_reference']=namespace
+        Engine=importlib.import_module('oma_reference.velocity_gait_reference').VelocityGaitReference
+        reference=Engine(motion,1,runtime['command_limits'],acceleration=runtime['phase_acceleration'])
+        clock=reference.clock
+        if protocol.get('format') != 'beyondmimic_velocity_protocol_v1':
+            raise ValueError('Command model requires an explicit physical-velocity protocol')
+    else:
+        clock = Clock(1,1/dt,motion["support_frames"],acceleration=runtime["phase_acceleration"])
     support_index = protocol["initial_support_index"]
     if not 0<=support_index<len(clock.support):raise ValueError("Invalid initial support")
-    clock.reset(torch.tensor([0]),clock.support[support_index].reshape(1))
+    if velocity_mode:
+        reference.reset(torch.tensor([0]),torch.tensor([support_index]),torch.zeros(1,2),torch.zeros(1))
+    else:
+        clock.reset(torch.tensor([0]),clock.support[support_index].reshape(1))
     mjcf = Path(a.mjcf) if a.mjcf else module/"assets/unitree_description/mjcf/g1.xml"
     model = mujoco.MjModel.from_xml_path(str(mjcf.resolve()));model.opt.timestep=physics_dt
     data = mujoco.MjData(model)
@@ -76,20 +94,33 @@ def main():
     foot_names = ["left_ankle_roll_link","right_ankle_roll_link"]
     foot_ids = [model.body(n).id for n in foot_names]
     phase = float(clock.phase[0])
-    data.qpos[:3] = sample(motion["body_pos_w"],phase)[pelvis]
-    data.qpos[3:7] = sample(motion["body_quat_w"],phase,True)[pelvis]
-    data.qpos[qids] = sample(motion["joint_pos"],phase);data.qvel[:]=0
+    if velocity_mode:
+        data.qpos[:3]=reference.body_pos_w[0,pelvis].numpy()
+        data.qpos[3:7]=reference.body_quat_w[0,pelvis].numpy()
+        data.qpos[qids]=reference.joint_pos[0].numpy()
+    else:
+        data.qpos[:3] = sample(motion["body_pos_w"],phase)[pelvis]
+        data.qpos[3:7] = sample(motion["body_quat_w"],phase,True)[pelvis]
+        data.qpos[qids] = sample(motion["joint_pos"],phase)
+    data.qvel[:]=0
     mujoco.mj_forward(model,data)
     out = Path(a.output_dir).resolve();out.mkdir(parents=True,exist_ok=True)
     header = ["step","time_s","stage","requested_go","reference_phase","reference_rate","reference_exhausted","terminated","root_x","root_y","root_z","root_vx","root_vy","root_vz","root_tilt_rad","reference_vx","reference_vy","reference_vz"]
     for side in ["left","right"]:header += [f"{side}_foot_{k}" for k in ["x","y","z","vx","vy","vz","fx","fy","fz"]]
     for prefix in ["q","dq","q_ref","dq_ref","action"]:header += [f"{prefix}__{n}" for n in names]
+    if velocity_mode:
+        header += ['raw_vx','raw_vy','raw_yaw_rate','bounded_vx','bounded_vy','bounded_yaw_rate',
+                   'effective_vx','effective_vy','effective_yaw_rate','walk_enabled','command_saturated',
+                   'actual_body_vx','actual_body_vy','actual_body_vz','actual_yaw','target_yaw',
+                   'actual_yaw_rate','reference_cycles','reference_root_x','reference_root_y']
     # Abort limits are the existing BeyondMimic offline verifier settings.
     abort_height = protocol["abort_pelvis_height_m"];abort_tilt = protocol["abort_tilt_rad"]
     manifest = {"checkpoint":str(Path(a.checkpoint).resolve()),"checkpoint_sha256":hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest(),
         "protocol":protocol,"policy_dt":dt,"physics_dt":physics_dt,"planned_steps":total,"joint_names":names,"body_names":body_names,
         "observation_dim":160,"state_source":"MuJoCo truth; kinematic-state-estimator transfer remains a separate check",
-        "reference_source":"Exact training motion tensors serialized with model","reference_sha256":runtime["reference_sha256"],
+        "reference_source":"Exact training motion tensors serialized with model",
+        "runtime_format":runtime["format"],"velocity_command_mode":velocity_mode,
+        "supported_command_scope":runtime.get("supported_command_scope","legacy_motion_replay"),"reference_sha256":runtime["reference_sha256"],
         "contact_force_threshold_source":runtime["contact_force_threshold"],"mjcf_sha256":hashlib.sha256(mjcf.read_bytes()).hexdigest(),
         "mujoco_version":mujoco.__version__,"video_requested":not a.no_video,"completed_steps":0,"completed_protocol":False,"terminated":False,"behavior_acceptance":False,
         "automatic_reset_policy":"Initialize once; abort at first physical failure; no reset during any GO/STOP switch.",
@@ -109,11 +140,27 @@ def main():
         with (out/"joints.csv").open("w",newline="",encoding="utf-8") as f:
             csv_writer=csv.writer(f);csv_writer.writerow(header)
             for stage,nsteps in zip(protocol["stages"],counts):
+                if velocity_mode:
+                    raw=np.asarray(stage['velocity'],dtype=np.float32)
+                    if raw.shape != (3,):raise ValueError('Velocity protocol requires vx/vy/yaw_rate')
+                    enabled=bool(stage.get('walk_enabled',True))
+                    if bool(stage['go']) != bool(enabled and np.linalg.norm(raw[:2])>0):
+                        raise ValueError('GO label disagrees with the physical velocity command')
+                    reference.request(torch.from_numpy(raw[None]),torch.tensor([enabled]))
+                    # Request validates packet only; current state derivatives remain
+                    # tied to the previous effective reference until the next step.
+                    reference.root.command.copy_(reference.effective_command)
                 for _ in range(nsteps):
                     mujoco.mj_forward(model,data)
                     phase=float(clock.phase[0]);rate=float(clock.rate[0])
-                    q_ref=sample(motion["joint_pos"],phase);dq_ref=sample(motion["joint_vel"],phase)*rate
-                    pos_ref=sample(motion["body_pos_w"],phase);quat_ref=sample(motion["body_quat_w"],phase,True)
+                    if velocity_mode:
+                        q_ref=reference.joint_pos[0].numpy();dq_ref=reference.joint_vel[0].numpy()
+                        pos_ref=reference.body_pos_w[0].numpy();quat_ref=reference.body_quat_w[0].numpy()
+                        reference_v=reference.body_lin_vel_w[0,pelvis].numpy()
+                    else:
+                        q_ref=sample(motion["joint_pos"],phase);dq_ref=sample(motion["joint_vel"],phase)*rate
+                        pos_ref=sample(motion["body_pos_w"],phase);quat_ref=sample(motion["body_quat_w"],phase,True)
+                        reference_v=sample(motion['body_lin_vel_w'],phase)[pelvis]*rate
                     anchor_r=matrix(data.xquat[anchor_id]);root_r=matrix(data.qpos[3:7])
                     obs=np.concatenate([q_ref,dq_ref,anchor_r.T@(pos_ref[anchor]-data.xpos[anchor_id]),
                         (anchor_r.T@matrix(quat_ref[anchor]))[:,:2].reshape(-1),root_r.T@data.qvel[:3],data.qvel[3:6],
@@ -122,8 +169,8 @@ def main():
                     with torch.inference_mode():action=actor(torch.from_numpy(obs[None]))[0].numpy()
                     if not np.isfinite(action).all():raise ValueError("Non-finite model action")
                     tilt=math.acos(float(np.clip(root_r[2,2],-1,1)))
-                    row=[step,step*dt,stage["name"],int(stage["go"]),phase,rate,int(clock.exhausted[0]),0,
-                         *data.qpos[:3].tolist(),*data.qvel[:3].tolist(),tilt,*((sample(motion["body_lin_vel_w"],phase)[pelvis])*rate).tolist()]
+                    row=[step,step*dt,stage["name"],int(stage["go"]),phase,rate,(0 if velocity_mode else int(clock.exhausted[0])),0,
+                         *data.qpos[:3].tolist(),*data.qvel[:3].tolist(),tilt,*reference_v.tolist()]
                     forces=np.zeros((2,3));force=np.zeros(6)
                     for index in range(data.ncon):
                         contact=data.contact[index];b1=int(model.geom_bodyid[contact.geom1]);b2=int(model.geom_bodyid[contact.geom2])
@@ -135,13 +182,24 @@ def main():
                         velocity=np.zeros(6);mujoco.mj_objectVelocity(model,data,mujoco.mjtObj.mjOBJ_BODY,foot,velocity,0)
                         row += [*data.xpos[foot].tolist(),*velocity[3:].tolist(),*forces[foot_i].tolist()]
                     row += [*data.qpos[qids].tolist(),*data.qvel[vids].tolist(),*q_ref.tolist(),*dq_ref.tolist(),*action.tolist()]
+                    if velocity_mode:
+                        body_v=root_r.T@data.qvel[:3]
+                        omega_world=root_r@data.qvel[3:6]
+                        row += [*reference.raw_command[0].tolist(),*reference.bounded_command[0].tolist(),
+                                *reference.effective_command[0].tolist(),int(reference.enabled[0]),
+                                int(reference.saturated[0].any()),*body_v.tolist(),
+                                math.atan2(root_r[1,0],root_r[0,0]),float(reference.root.yaw[0]),
+                                float(omega_world[2]),int(clock.cycles[0]),*reference.root.position[0].tolist()]
+                    if len(row)!=len(header):raise ValueError('Telemetry schema/row mismatch')
                     if writer is not None:
                         camera.lookat[:]=data.qpos[:3];renderer.update_scene(data,camera);writer.append_data(renderer.render())
                     target=control["default_joint_pos"]+control["action_scale"]*action
                     for _ in range(runtime["decimation"]):
                         torque=np.clip(control["kp"]*(target-data.qpos[qids])-control["kd"]*data.qvel[vids],-control["effort_limit"],control["effort_limit"])
                         data.qfrc_applied[:]=0;data.qfrc_applied[vids]=torque;mujoco.mj_step(model,data)
-                    last_action=action.copy();clock.step(torch.tensor([bool(stage["go"])]),dt)
+                    last_action=action.copy()
+                    if velocity_mode:reference.step(dt)
+                    else:clock.step(torch.tensor([bool(stage["go"])]),dt)
                     tilt_after=math.acos(float(np.clip(matrix(data.qpos[3:7])[2,2],-1,1)))
                     if not np.isfinite(data.qpos).all() or not np.isfinite(data.qvel).all():terminated=True;reason="non_finite_physics"
                     elif data.qpos[2]<abort_height:terminated=True;reason="pelvis_height_abort"
