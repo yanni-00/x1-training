@@ -1,6 +1,7 @@
 """[OMA] Exact motion/control state needed by the existing MuJoCo play path."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import numpy as np
 import torch
@@ -26,10 +27,15 @@ def collect_runtime(env, policy):
                 'reference_space':str(source['reference_space']),
                 'source_csv_sha256':str(source['source_csv_sha256']),
                 'command_limits':[list(value) for value in command.command_limits],
-                'supported_command_scope':'forward_speed_and_stable_stop_integration_only',
+                'supported_command_scope':('forward_speed_walking_turns_and_stable_stop_training'
+                    if any(command.cfg.yaw_rate_range) else 'forward_speed_and_stable_stop_integration_only'),
+                'command_constraints':{'lateral':False,'backward':False,'in_place_turn':False},
+                'warm_start':json.loads(os.environ.get('OMA_VELOCITY_RESUME_PROVENANCE','null')),
                 'main_joystick_goal_accepted':False,
                 'training_command_curriculum':{
                     'speed_scale_range':list(command.cfg.speed_scale_range),
+                    'yaw_rate_range_radps':list(command.cfg.yaw_rate_range),
+                    'straight_go_probability':float(command.cfg.straight_probability),
                     'go_duration_range_s':list(command.cfg.go_duration_range),
                     'stop_duration_range_s':list(command.cfg.stop_duration_range),
                     'initial_go_probability':float(command.cfg.initial_go_probability),
@@ -86,3 +92,15 @@ def collect_runtime(env, policy):
         "reference_sha256": hashlib.sha256(Path(command.cfg.motion_file).read_bytes()).hexdigest(),
         "motion": motion, "control": control,
     }
+
+
+def validate_runtime_continuation(parent, current):
+    """Require the actual new environment interface/control to match its parent."""
+    for key in ['format','reference_sha256','joint_names','body_names','tracked_body_names',
+                'anchor_body_name','physics_dt','decimation','policy_dt','phase_acceleration',
+                'normalizer_epsilon','actor_obs_normalization','reward_parameters']:
+        if parent[key] != current[key]:raise RuntimeError('Continuation runtime differs: '+key)
+    for key,old in parent['control'].items():
+        if not torch.equal(old.cpu(),current['control'][key].cpu()):
+            raise RuntimeError('Continuation native control differs: '+key)
+    return {'same_reference_interface_control':True}

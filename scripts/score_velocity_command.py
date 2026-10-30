@@ -5,6 +5,20 @@ import numpy as np
 from score_walk_stop import score
 
 
+def yaw_tracking(data):
+    """Raw-command net yaw tracking; periodic pelvis yaw is reported separately."""
+    t=np.asarray([float(r['time_s']) for r in data])
+    if len(t)<2 or np.any(np.diff(t)<=0):raise ValueError('Yaw metric requires increasing timestamps')
+    requested=np.asarray([float(r['raw_yaw_rate'])*int(r['walk_enabled']) for r in data])
+    actual=np.unwrap(np.asarray([float(r['actual_yaw']) for r in data]))
+    span=float(t[-1]-t[0]);expected=float(np.dot(requested[:-1],np.diff(t)))
+    observed=float(actual[-1]-actual[0]);rate=np.asarray([float(r['actual_yaw_rate']) for r in data])
+    return {'yaw_observed_delta_rad':observed,'yaw_requested_delta_rad':expected,
+            'yaw_measured_span_s':span,'yaw_mean_rate_error_radps':abs(observed-expected)/span,
+            'yaw_rate_instantaneous_rmse_radps':float(np.sqrt(np.mean((rate-requested)**2))),
+            'turn_direction_correct':bool(expected!=0 and observed*expected>0)}
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--evaluation_dir',required=True);p.add_argument('--gates',required=True)
     a=p.parse_args();directory=Path(a.evaluation_dir)
@@ -12,6 +26,9 @@ def main():
     manifest=json.loads((directory/'evaluation_manifest.json').read_text())
     if not manifest.get('velocity_command_mode'):
         raise ValueError('Legacy replay is not velocity-command evidence')
+    turning=any(float(stage['velocity'][2])!=0 for stage in manifest['protocol']['stages'])
+    if turning and not all(k in gates for k in ['go_yaw_mean_rate_error_max_radps','stop_yaw_rate_max_radps']):
+        raise ValueError('Turning protocol requires frozen angular gates')
     result=score(directory,gates)
     with (directory/'joints.csv').open(newline='') as f:rows=list(csv.DictReader(f))
     if not rows:raise ValueError('No actual-state telemetry')
@@ -30,6 +47,7 @@ def main():
             m['reference_velocity_tracking_rmse_mps']=m.pop('velocity_tracking_rmse_mps')
         m['user_command_velocity_rmse_mps']=rmse
         m['heading_error_max_rad']=float(np.abs(yaw).max())
+        m.update(yaw_tracking(data))
         m['reference_cycle_count_start']=int(data[0]['reference_cycles'])
         m['reference_cycle_count_end']=int(data[-1]['reference_cycles'])
         checks=result['quantitative_gate_checks'].get(stage['name'])
@@ -37,6 +55,9 @@ def main():
             checks['heading']=m['heading_error_max_rad']<=gates['heading_error_max_rad']
             if stage['go']:
                 checks['go_velocity']=rmse<=gates['go_velocity_rmse_max_mps']
+                if 'go_yaw_mean_rate_error_max_radps' in gates:
+                    checks['go_yaw_mean_rate']=m['yaw_mean_rate_error_radps']<=gates['go_yaw_mean_rate_error_max_radps']
+                    if float(stage['velocity'][2])!=0:checks['turn_direction']=m['turn_direction_correct']
         expected=np.asarray(stage['velocity'],dtype=np.float32)
         result['structural_checks'][stage['name']+'_raw_command_matches_protocol']=bool(all(
             np.allclose([float(row[k]) for k in ['raw_vx','raw_vy','raw_yaw_rate']],expected,rtol=0,atol=1e-7) for row in data))
@@ -45,7 +66,7 @@ def main():
         len(result['quantitative_gate_checks'])==len(manifest['protocol']['stages']) and
         all(all(values.values()) for values in result['quantitative_gate_checks'].values()))
     result['run_acceptance']=result['quantitative_pass'] and result['video_review_pass']
-    result['scope']='Forward velocity/stop integration only; full joystick directions, naturalness review and independent training remain open'
+    result['scope']='Forward and commanded walking-turn integration; lateral/backward/in-place motion, owner-reported gait defects, full naturalness and independent training remain open' if turning else 'Forward velocity/stop integration only; full joystick directions, naturalness review and independent training remain open'
     result['velocity_target_source']='Raw user command, masked only by explicitly logged walking-mode enable; never the braked reference'
     result['main_joystick_goal_accepted']=False
     result['gates_sha256']=hashlib.sha256(Path(a.gates).read_bytes()).hexdigest()

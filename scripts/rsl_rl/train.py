@@ -152,6 +152,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
+        if os.environ.get('OMA_VELOCITY_RESUME_PROVENANCE'):
+            import torch
+            from whole_body_tracking.utils.oma_checkpoint import collect_runtime, validate_runtime_continuation
+            parent=torch.load(resume_path,map_location='cpu',weights_only=True)['infos']['oma_runtime']
+            current=collect_runtime(env,runner.alg.policy)
+            validate_runtime_continuation(parent,current)
+            runner._oma_runtime=current
+            print('[OMA] Actual continuation environment/reference/control match verified',flush=True)
 
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)

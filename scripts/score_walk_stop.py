@@ -23,6 +23,8 @@ def score(directory,gates=None):
         for name in REQUIRED_GATES:
             if name in gates and (not math.isfinite(float(gates[name])) or gates[name]<0):
                 raise ValueError('Invalid frozen gate: '+name)
+        for key in ['stop_yaw_rate_max_radps','go_yaw_mean_rate_error_max_radps']:
+            if key in gates and (not math.isfinite(float(gates[key])) or gates[key]<0):raise ValueError('Invalid frozen angular gate: '+key)
         if 'both_contact_fraction_min' in gates and gates['both_contact_fraction_min']>1:
             raise ValueError('Invalid contact fraction gate')
     checks={'row_count_matches_protocol':len(rows)==len(expected),'stage_schedule_matches_protocol':[r['stage'] for r in rows]==expected,'step_sequence_is_continuous':[int(r['step']) for r in rows]==list(range(len(rows))),'timestamps_match_policy_clock':all(abs(float(r['time_s'])-i*dt)<=1e-9 for i,r in enumerate(rows)),'completed_protocol':bool(manifest['completed_protocol']),'no_environment_termination':all(int(row['terminated'])==0 for row in rows),'all_stages_recorded':set(s['name'] for s in protocol['stages']).issubset(set(r['stage'] for r in rows)),'no_reference_exhaustion_during_go':all(not(int(r['requested_go']) and int(r['reference_exhausted'])) for r in rows)}
@@ -49,6 +51,10 @@ def score(directory,gates=None):
         foot_v=np.asarray([[[float(r[f'{s}_foot_{k}']) for k in ['vx','vy']] for s in ['left','right']] for r in data]);slip=np.linalg.norm(foot_v,axis=-1)
         contact_slip=slip[tail][contact[tail]]
         m={'recorded_duration_s':float(len(data)*dt),'tail_samples':int(tail.sum()),'actual_speed_mean_mps':float(speed[tail].mean()),'actual_speed_max_mps':float(speed[tail].max()),'actual_planar_drift_m':float(np.linalg.norm(pos[tail]-pos[tail][0],axis=1).max()),'actual_planar_path_m':float(np.linalg.norm(np.diff(pos,axis=0),axis=1).sum()),'velocity_tracking_rmse_mps':float(np.sqrt(np.mean(np.sum((v-ref)**2,axis=1)))),'tilt_max_rad':float(tilt.max()),'both_contact_fraction':float(contact[tail].all(axis=1).mean()),'contact_foot_speed_max_mps':float(contact_slip.max()) if len(contact_slip) else None,'reference_rate_tail_max':float(rates[tail].max())}
+        yaw_rate=None
+        if gates is not None and 'stop_yaw_rate_max_radps' in gates:
+            yaw_rate=np.asarray([abs(float(r['actual_yaw_rate'])) for r in data])
+            m['actual_yaw_rate_tail_max_radps']=float(yaw_rate[tail].max())
         if not spec['go']:
             m['reference_hold_response_s']=None
             moving=np.flatnonzero(rates!=0)
@@ -65,6 +71,7 @@ def score(directory,gates=None):
                         and tilt[j:].max()<=gates['tilt_max_rad']
                         and contact[j:].all(axis=1).mean()>=gates['both_contact_fraction_min']
                         and len(touching_slip)>0 and touching_slip.max()<=gates['contact_foot_speed_max_mps'])
+                    if yaw_rate is not None:stable=stable and yaw_rate[j:].max()<=gates['stop_yaw_rate_max_radps']
                     if stable:
                         m['stable_stop_response_s']=float(t[j]-t[0]);break
         metrics[spec['name']]=m
@@ -75,6 +82,8 @@ def score(directory,gates=None):
                 stage_gates.update(go_velocity=m['velocity_tracking_rmse_mps']<=gates['go_velocity_rmse_max_mps'],go_progress=m['actual_planar_path_m']>=gates['go_path_min_m'])
             else:
                 stage_gates.update(stop_speed=m['actual_speed_max_mps']<=gates['stop_speed_max_mps'],stop_drift=m['actual_planar_drift_m']<=gates['stop_drift_max_m'],both_contact=m['both_contact_fraction']>=gates['both_contact_fraction_min'],contact_slip=m['contact_foot_speed_max_mps'] is not None and m['contact_foot_speed_max_mps']<=gates['contact_foot_speed_max_mps'])
+            if not spec['go'] and yaw_rate is not None:
+                stage_gates['stop_yaw_rate']=m['actual_yaw_rate_tail_max_radps']<=gates['stop_yaw_rate_max_radps']
             gate_checks[spec['name']]=stage_gates
     complete_gates=gates is not None and all(k in gates for k in REQUIRED_GATES)
     quantitative_pass=bool(complete_gates and all(checks.values()) and len(gate_checks)==len(protocol['stages']) and all(all(g.values()) for g in gate_checks.values()))

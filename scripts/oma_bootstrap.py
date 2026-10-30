@@ -11,6 +11,40 @@ ASSET_SHA='b514bc9ddd1039c29a0e6feea9f57f1503f6657d07d97a4ef8a7b11fbebe6674'
 CSV_SHA='51cf310f14ecbb8be1f41ea09345df0c89024ff884fb9ab881cac339f820c787'
 
 
+def validate_velocity_resume(checkpoint, motion_file):
+    """[OMA] Explicit same-interface/same-reference continuation; no migration."""
+    import numpy as np
+    import torch
+    runtime=checkpoint['infos']['oma_runtime'];state=checkpoint['model_state_dict']
+    if runtime.get('format')!='beyondmimic_g1_velocity_runtime_v1':
+        raise RuntimeError('Velocity continuation requires a velocity-schema parent')
+    reference_sha=hashlib.sha256(Path(motion_file).read_bytes()).hexdigest()
+    if runtime['reference_sha256']!=reference_sha:
+        raise RuntimeError('Velocity continuation reference differs from exact trained motion')
+    with np.load(motion_file,allow_pickle=False) as data:
+        if runtime['joint_names']!=data['joint_names'].tolist() or runtime['body_names']!=data['body_names'].tolist():
+            raise RuntimeError('Velocity continuation articulation order differs')
+    if state['actor.0.weight'].shape[1]!=160 or state['critic.0.weight'].shape[1]!=286:
+        raise RuntimeError('Velocity continuation observation architecture differs')
+    if not runtime['actor_obs_normalization'] or runtime.get('normalizer_epsilon',0)<=0:
+        raise RuntimeError('Velocity continuation requires native observation normalization')
+    if state['actor_obs_normalizer._mean'].numel()!=160 or state['critic_obs_normalizer._mean'].numel()!=286:
+        raise RuntimeError('Velocity continuation normalizer dimension differs')
+    if any(not torch.isfinite(value).all() for value in state.values()):
+        raise RuntimeError('Non-finite parent model state')
+    for name,value in runtime['control'].items():
+        if value.shape!=(29,) or not torch.isfinite(value).all():
+            raise RuntimeError('Invalid parent native control '+name)
+    optimizer_steps=[float(value['step']) for value in checkpoint['optimizer_state_dict']['state'].values() if 'step' in value]
+    count=int(state['actor_obs_normalizer.count'])
+    if count<=0 or not optimizer_steps or max(optimizer_steps)<=0:
+        raise RuntimeError('Parent optimizer/normalizer has no actual training history')
+    return {'schema':'explicit_velocity_continuation_v1','saved_iteration':int(checkpoint['iter']),
+            'parent_normalizer_count':count,'parent_optimizer_step':max(optimizer_steps),
+            'reference_sha256':reference_sha,'reference_matches':True,
+            'parent_command_limits':runtime['command_limits'],'architecture':[160,286,29]}
+
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('--num_envs',type=int,default=256);p.add_argument('--iterations',type=int,default=64);p.add_argument('--seed',type=int,default=1);p.add_argument('--run_name',default='oma_walkstop_smoke');p.add_argument('--save_interval',type=int,default=16);p.add_argument('--headless',action='store_true')
     # Same signed-URL + checksum route as the established G1 train.py.
@@ -18,9 +52,12 @@ def main():
     p.add_argument('--native_crosscheck', action='store_true',
                    help='Evaluate the supplied fixed checkpoint; no PPO updates or environment installation')
     p.add_argument('--velocity_reference',action='store_true',help='[OMA] New command-root/cyclic reference task; clean PPO, not legacy resume')
+    p.add_argument('--velocity_resume',action='store_true',help='[OMA] Explicit compatible velocity-task continuation with exact reference/architecture guards')
     args,extra=p.parse_known_args()
-    if args.velocity_reference and (args.gm_resume_url or args.native_crosscheck):
-        raise ValueError('New reference task requires clean PPO; no implicit legacy checkpoint migration')
+    if args.velocity_resume and not (args.velocity_reference and args.gm_resume_url):
+        raise ValueError('Velocity resume requires explicit velocity task and parent URL/checksum')
+    if args.velocity_reference and (args.native_crosscheck or (args.gm_resume_url and not args.velocity_resume)):
+        raise ValueError('No implicit legacy migration; velocity continuation requires --velocity_resume')
     if args.native_crosscheck and not args.gm_resume_url:
         raise ValueError('Native crosscheck requires the already authorized source checkpoint')
     if min(args.num_envs,args.iterations,args.save_interval)<=0:raise ValueError('Training sizes must be positive')
@@ -71,7 +108,7 @@ def main():
         if not converted.is_file():raise RuntimeError('Native cyclic FK worker produced no NPZ')
         subprocess.run([sys.executable,str(ROOT/'scripts/prepare_velocity_gait.py'),'--input',str(converted),
                         '--selected',str(selected_path),'--output',str(labeled)],check=True)
-        print('[OMA] Stage: NEW command-conditioned native PPO; no old optimizer/weights',flush=True)
+        print('[OMA] Stage: explicit compatible velocity-task continuation' if args.velocity_resume else '[OMA] Stage: NEW command-conditioned native PPO; no old optimizer/weights',flush=True)
     else:
         csv=ROOT/'data/raw/walk2_subject1.csv'
         if hashlib.sha256(csv.read_bytes()).hexdigest()!=CSV_SHA:raise RuntimeError('Starter motion checksum mismatch')
@@ -115,6 +152,11 @@ def main():
         import torch
         checkpoint=torch.load(checkpoint_path,map_location='cpu',weights_only=True)
         runtime=checkpoint['infos']['oma_runtime']
+        if args.velocity_resume:
+            provenance=validate_velocity_resume(checkpoint,labeled)
+            provenance['parent_checkpoint_sha256']=args.checkpoint_sha256
+            os.environ['OMA_VELOCITY_RESUME_PROVENANCE']=json.dumps(provenance)
+            print('[OMA] Explicit velocity continuation verified: '+json.dumps(provenance),flush=True)
         if runtime['reference_sha256']!=hashlib.sha256(labeled.read_bytes()).hexdigest():
             raise RuntimeError('Resume reference differs from the exact trained motion')
         if not runtime['actor_obs_normalization']:

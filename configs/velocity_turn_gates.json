@@ -1,0 +1,17 @@
+{
+  "settings_kind": "Preregistered engineering acceptance criteria chosen for this simulation pilot; not measured G1/F1 hardware limits or estimated performance. Frozen before launching the baseline. Heading gate is a new preregistered simulation criterion; no measured hardware limit is claimed.",
+  "stop_speed_max_mps": 0.1,
+  "stop_drift_max_m": 0.1,
+  "tilt_max_rad": 0.35,
+  "go_velocity_rmse_max_mps": 0.3,
+  "go_path_min_m": 0.5,
+  "both_contact_fraction_min": 0.8,
+  "contact_foot_speed_max_mps": 0.2,
+  "response_deadline_s": null,
+  "scope": "Forward command integration only; full joystick goal remains open",
+  "heading_error_max_rad": 0.35,
+  "go_yaw_mean_rate_error_max_radps": 0.1,
+  "stop_yaw_rate_max_radps": 0.1,
+  "angular_threshold_source": "Preregistered engineering evaluation settings, not measured hardware capabilities",
+  "quality_caveat": "GO contact scuff and owner-reported coordination hesitation require separate contact diagnostics and full-video review; quantitative gates do not accept naturalness"
+}

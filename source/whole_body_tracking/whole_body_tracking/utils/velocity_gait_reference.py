@@ -52,7 +52,14 @@ class VelocityGaitReference:
     def request(self,command,walk_enabled):
         # Reuse the exact command-boundary validation; root receives a separate
         # effective/braked twist when step() integrates the reference.
-        self.root.request(command,walk_enabled)
+        packet=torch.as_tensor(command,dtype=torch.float32,device=self.device)
+        enabled=torch.as_tensor(walk_enabled,dtype=torch.bool,device=self.device)
+        if packet.shape != self.raw_command.shape or enabled.shape != self.enabled.shape:
+            raise ValueError('Command packet shape mismatch')
+        bounded=torch.minimum(torch.maximum(packet,self.root.limits[:,0]),self.root.limits[:,1])
+        if (enabled & (bounded[:,:2].norm(dim=-1)==0) & (bounded[:,2]!=0)).any():
+            raise ValueError('In-place turning requires a separately validated gait')
+        self.root.request(packet,enabled)
         self.raw_command.copy_(self.root.raw_command)
         self.bounded_command.copy_(self.root.command)
         self.enabled.copy_(self.root.walk_enabled)

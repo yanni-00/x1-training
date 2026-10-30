@@ -11,13 +11,16 @@ class VelocityGaitCommand(MotionCommand):
     def __init__(self,cfg,env):
         if not (0 <= cfg.initial_go_probability <= 1 and 0 < cfg.speed_scale_range[0] <= cfg.speed_scale_range[1]):
             raise ValueError('Invalid command curriculum settings')
+        if not (0 <= cfg.straight_probability <= 1 and
+                np.isfinite(cfg.yaw_rate_range).all() and cfg.yaw_rate_range[0] <= 0 <= cfg.yaw_rate_range[1]):
+            raise ValueError('Invalid walking-turn curriculum')
         super().__init__(cfg,env)
         with np.load(cfg.motion_file,allow_pickle=False) as data:
             if str(data['reference_space']) != 'cyclic_pelvis_xy_local_v1':
                 raise ValueError('Requires freshly recomputed native cyclic local FK')
             arrays={key:data[key].copy() for key in data.files}
         nominal=float(arrays['nominal_reference_speed_mps'][0])
-        self.command_limits=((0.0,nominal*cfg.speed_scale_range[1]),(0.0,0.0),(0.0,0.0))
+        self.command_limits=((0.0,nominal*cfg.speed_scale_range[1]),(0.0,0.0),tuple(cfg.yaw_rate_range))
         self.reference=VelocityGaitReference(arrays,self.num_envs,self.command_limits,self.device,cfg.phase_acceleration)
         self.clock=self.reference.clock
         if abs(self.reference.fps*env.cfg.sim.dt*env.cfg.decimation-1) > 1e-5:
@@ -28,7 +31,8 @@ class VelocityGaitCommand(MotionCommand):
         self.mode_time=torch.zeros(self.num_envs,device=self.device)
         self.manual_command=False
         for key in ['requested_vx','requested_vy','requested_yaw_rate','effective_vx',
-                    'reference_rate','reference_cycles','actual_planar_speed','command_speed_error']:
+                    'reference_rate','reference_cycles','actual_planar_speed','command_speed_error',
+                    'effective_yaw_rate','actual_yaw_rate','command_yaw_rate_error']:
             self.metrics[key]=torch.zeros(self.num_envs,device=self.device)
 
     def request(self,velocity,walk_enabled=True):
@@ -69,6 +73,10 @@ class VelocityGaitCommand(MotionCommand):
         scales=sample_uniform(*self.cfg.speed_scale_range,(len(ids),),self.device)
         self.user_command[ids]=0
         self.user_command[ids,0]=moving*scales*self.reference.nominal_speed
+        if self.cfg.yaw_rate_range != (0.0,0.0) and any(self.cfg.yaw_rate_range):
+            yaw=sample_uniform(*self.cfg.yaw_rate_range,(len(ids),),self.device)
+            straight=torch.rand(len(ids),device=self.device)<self.cfg.straight_probability
+            self.user_command[ids,2]=torch.where(moving & ~straight,yaw,torch.zeros_like(yaw))
         go_time=sample_uniform(*self.cfg.go_duration_range,(len(ids),),self.device)
         stop_time=sample_uniform(*self.cfg.stop_duration_range,(len(ids),),self.device)
         self.mode_time[ids]=torch.where(moving,go_time,stop_time)
@@ -128,6 +136,10 @@ class VelocityGaitCommand(MotionCommand):
         # Raw user target is distinct from the support-braking reference target.
         target=torch.where(self.walk_enabled[:,None],self.user_command,0)
         self.metrics['command_speed_error']=(velocity[:,:2]-target[:,:2]).norm(dim=-1)
+        yaw_rate=self.robot.data.root_ang_vel_w[:,2]
+        self.metrics['effective_yaw_rate']=self.reference.effective_command[:,2].clone()
+        self.metrics['actual_yaw_rate']=yaw_rate.clone()
+        self.metrics['command_yaw_rate_error']=(yaw_rate-target[:,2]).abs()
 
 
 @configclass
@@ -139,5 +151,7 @@ class VelocityGaitCommandCfg(MotionCommandCfg):
     # Engineering curriculum, fractions of the selected human template speed;
     # not measured hardware limits. Forward-only first integration is partial.
     speed_scale_range:tuple[float,float]=(.5,1.0)
+    yaw_rate_range:tuple[float,float]=(0.0,0.0)
+    straight_probability:float=1.0
     go_duration_range:tuple[float,float]=(2.0,4.0)
     stop_duration_range:tuple[float,float]=(2.0,4.0)
