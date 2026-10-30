@@ -28,6 +28,13 @@ def collect_runtime(env, policy):
                 'command_limits':[list(value) for value in command.command_limits],
                 'supported_command_scope':'forward_speed_and_stable_stop_integration_only',
                 'main_joystick_goal_accepted':False,
+                'training_command_curriculum':{
+                    'speed_scale_range':list(command.cfg.speed_scale_range),
+                    'go_duration_range_s':list(command.cfg.go_duration_range),
+                    'stop_duration_range_s':list(command.cfg.stop_duration_range),
+                    'initial_go_probability':float(command.cfg.initial_go_probability),
+                    'episode_length_s':float(base.cfg.episode_length_s),
+                },
                 'native_gait_audit':json.loads(Path(command.cfg.motion_file).with_suffix('.native-audit.json').read_text()),
             }
     if joint_names != list(robot.joint_names):
