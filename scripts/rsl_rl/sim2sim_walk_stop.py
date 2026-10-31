@@ -50,7 +50,9 @@ def main():
     module = ROOT/"source/whole_body_tracking/whole_body_tracking"
     actor = load_module("runtime_policy",module/"utils/runtime_policy.py").RuntimeActor(checkpoint).eval()
     Clock = load_module("reference_clock",module/"tasks/tracking/mdp/reference_clock.py").SupportPhaseClock
-    velocity_mode = runtime['format'] == 'beyondmimic_g1_velocity_runtime_v1'
+    proprio_mode = runtime['format'] == 'beyondmimic_g1_velocity_proprio_runtime_v1'
+    velocity_mode = runtime['format'] in {'beyondmimic_g1_velocity_runtime_v1','beyondmimic_g1_velocity_proprio_runtime_v1'}
+    ProprioObservation=load_module('actor_observations',module/'utils/actor_observations.py').proprioceptive_observation if proprio_mode else None
     if not velocity_mode and runtime['format'] != 'beyondmimic_g1_runtime_v1':
         raise ValueError('Unsupported motion runtime schema')
     motion = {k:v.cpu().numpy() for k,v in runtime["motion"].items()}
@@ -117,7 +119,7 @@ def main():
     abort_height = protocol["abort_pelvis_height_m"];abort_tilt = protocol["abort_tilt_rad"]
     manifest = {"checkpoint":str(Path(a.checkpoint).resolve()),"checkpoint_sha256":hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest(),
         "protocol":protocol,"policy_dt":dt,"physics_dt":physics_dt,"planned_steps":total,"joint_names":names,"body_names":body_names,
-        "observation_dim":160,"state_source":"MuJoCo truth; kinematic-state-estimator transfer remains a separate check",
+        "observation_dim":actor.observation_dim,"state_source":("Deployment-observable IMU/joints/reference; truth only for evaluation" if proprio_mode else "MuJoCo truth; kinematic-state-estimator transfer remains a separate check"),
         "reference_source":"Exact training motion tensors serialized with model",
         "runtime_format":runtime["format"],"velocity_command_mode":velocity_mode,
         "supported_command_scope":runtime.get("supported_command_scope","legacy_motion_replay"),"reference_sha256":runtime["reference_sha256"],
@@ -162,10 +164,14 @@ def main():
                         pos_ref=sample(motion["body_pos_w"],phase);quat_ref=sample(motion["body_quat_w"],phase,True)
                         reference_v=sample(motion['body_lin_vel_w'],phase)[pelvis]*rate
                     anchor_r=matrix(data.xquat[anchor_id]);root_r=matrix(data.qpos[3:7])
-                    obs=np.concatenate([q_ref,dq_ref,anchor_r.T@(pos_ref[anchor]-data.xpos[anchor_id]),
-                        (anchor_r.T@matrix(quat_ref[anchor]))[:,:2].reshape(-1),root_r.T@data.qvel[:3],data.qvel[3:6],
-                        data.qpos[qids]-control["default_joint_pos"],data.qvel[vids],last_action]).astype(np.float32)
-                    if obs.shape!=(160,) or not np.isfinite(obs).all():raise ValueError("Invalid actual-state observation")
+                    if proprio_mode:
+                        obs=ProprioObservation(q_ref,dq_ref,anchor_r.T@matrix(quat_ref[anchor]),data.qvel[3:6],
+                            data.qpos[qids],data.qvel[vids],last_action,control["default_joint_pos"])
+                    else:
+                        obs=np.concatenate([q_ref,dq_ref,anchor_r.T@(pos_ref[anchor]-data.xpos[anchor_id]),
+                            (anchor_r.T@matrix(quat_ref[anchor]))[:,:2].reshape(-1),root_r.T@data.qvel[:3],data.qvel[3:6],
+                            data.qpos[qids]-control["default_joint_pos"],data.qvel[vids],last_action]).astype(np.float32)
+                    if obs.shape!=(actor.observation_dim,) or not np.isfinite(obs).all():raise ValueError("Invalid actual-state observation")
                     with torch.inference_mode():action=actor(torch.from_numpy(obs[None]))[0].numpy()
                     if not np.isfinite(action).all():raise ValueError("Non-finite model action")
                     tilt=math.acos(float(np.clip(root_r[2,2],-1,1)))

@@ -161,3 +161,7 @@ Below is an overview of the code structure for this repository:
   Includes utility scripts for preprocessing motion data, training policies, and evaluating trained policies.
 
 This structure is designed to ensure modularity and ease of navigation for developers expanding the project.
+
+## [OMA] Deployment-observable velocity actor
+
+Owner-approved2026-10-31 correction: Tracking-VelocityReference-G1-Wo-State-Estimation-v0 removes motion_anchor_pos_b/base_lin_vel from the actor, preserving critic/rewards/robot control. Raw actor154,critic286; no new history stack in this change. Fresh weights only; old160 policy/optimizer/normalizer are not implicitly migrated. configs/oma_proprioceptive_velocity.json pins the staged smoke/pilot settings. The native active-term/shape/source audit runs before PPO and is serialized into checkpoints as beyondmimic_g1_velocity_proprio_runtime_v1. Existing160 runtime schemas remain supported. Actual position/velocity remain legal only for critic/reward/evaluation. Run tests/test_proprioceptive_contract.py locally; actual Lab audit and deployment C++/MuJoCo behavior remain separate mandatory gates.

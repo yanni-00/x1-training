@@ -77,10 +77,15 @@ def collect_runtime(env, policy):
     }
     if any(value.shape != (29,) or not torch.isfinite(value).all() for value in control.values()):
         raise RuntimeError("Invalid runtime control parameters")
+    from .actor_observations import audit_native_observations
+    actor_audit = audit_native_observations(env, policy)
+    proprio = bool(getattr(base.cfg, "oma_proprioceptive_actor", False))
     normalizer = getattr(policy, "actor_obs_normalizer", None)
     eps = getattr(normalizer, "eps", None)
     return {
-        "format": "beyondmimic_g1_velocity_runtime_v1" if velocity_mode else "beyondmimic_g1_runtime_v1",
+        "format": ("beyondmimic_g1_velocity_proprio_runtime_v1" if proprio else
+                   "beyondmimic_g1_velocity_runtime_v1" if velocity_mode else "beyondmimic_g1_runtime_v1"),
+        "actor_observation_contract": actor_audit,
         **velocity_metadata,
         "joint_names": joint_names, "body_names": body_names,
         "tracked_body_names": list(command.cfg.body_names),

@@ -1,0 +1,28 @@
+{
+  "design_id": "design-beyondmimic-g1-003",
+  "functional_unit": "observable-actor/native-audit/runtime/deployment-guard",
+  "task": "Tracking-VelocityReference-G1-Wo-State-Estimation-v0",
+  "actor_observation_dim": 154,
+  "critic_observation_dim": 286,
+  "history_length": 1,
+  "forbidden_actor_terms": [
+    "motion_anchor_pos_b",
+    "base_lin_vel"
+  ],
+  "initialization": "fresh; no160 checkpoint migration",
+  "smoke": {
+    "num_envs": 256,
+    "max_iterations": 64,
+    "save_interval": 16,
+    "seed": 1
+  },
+  "pilot": {
+    "num_envs": 4096,
+    "max_iterations": 2000,
+    "save_interval": 250,
+    "seed": 1
+  },
+  "preserved": "exp003 reference/control/rewards/randomization/PPO/physical terminations/yaw curriculum",
+  "new_runtime_format": "beyondmimic_g1_velocity_proprio_runtime_v1",
+  "deployment_gate": "must replay actual shared C++154 observations and limits without truth-state actor inputs"
+}

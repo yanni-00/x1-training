@@ -55,7 +55,10 @@ def main():
     p.add_argument('--velocity_resume',action='store_true',help='[OMA] Explicit compatible velocity-task continuation with exact reference/architecture guards')
     p.add_argument('--velocity_feet_contact_penalty',type=float,default=None,
                    help='[OMA] Explicitly authorize the one preregistered added foot-contact cost; must match native resolved weight')
+    p.add_argument('--proprioceptive_actor',action='store_true',help='[OMA] Fresh deployment-observable154 actor; no160 migration')
     args,extra=p.parse_known_args()
+    if args.proprioceptive_actor and (not args.velocity_reference or args.gm_resume_url or args.velocity_resume or args.native_crosscheck):
+        raise ValueError('Proprioceptive actor requires fresh velocity training; no implicit checkpoint migration')
     if args.velocity_feet_contact_penalty is not None:
         import math
         if not args.velocity_resume or not math.isfinite(args.velocity_feet_contact_penalty) or args.velocity_feet_contact_penalty>=0:
@@ -141,7 +144,7 @@ def main():
         subprocess.run([sys.executable,str(ROOT/'scripts/prepare_walkstop_motion.py'),'--input',str(converted),'--output',str(labeled)],check=True)
     print('[OMA] Stage: fixed-weight native evaluation' if args.native_crosscheck else '[OMA] Stage: native BeyondMimic PPO walk/hold/resume training',flush=True)
     train=ROOT/'scripts/rsl_rl/train.py'
-    argv=[sys.executable,str(train),'--task',('Tracking-VelocityReference-G1-v0' if args.velocity_reference else 'Tracking-WalkStop-G1-v0'),'--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
+    argv=[sys.executable,str(train),'--task',('Tracking-VelocityReference-G1-Wo-State-Estimation-v0' if args.proprioceptive_actor else 'Tracking-VelocityReference-G1-v0' if args.velocity_reference else 'Tracking-WalkStop-G1-v0'),'--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
     if args.headless:argv.append('--headless')
     if args.gm_resume_url:
         # Match the native agent's actual experiment_name (g1_flat), not the

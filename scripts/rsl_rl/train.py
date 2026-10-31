@@ -134,6 +134,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env)
 
+    # [OMA] Hard observation gate BEFORE optimizer/learning: no hidden actor truth terms.
+    from whole_body_tracking.utils.actor_observations import audit_native_observations
+    import json
+    actor_audit = audit_native_observations(env)
+    print("[OMA] Native actor observation audit: " + json.dumps(actor_audit), flush=True)
+
     # create runner from rsl-rl
     runner = OnPolicyRunner(
         env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device, registry_name=registry_name
