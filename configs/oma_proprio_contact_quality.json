@@ -1,0 +1,27 @@
+{
+  "design": "delta-exp-20261102-004",
+  "task": "Tracking-VelocityReference-G1-Proprio-Deploy-Limits-v0",
+  "actor_observation_dim": 154,
+  "critic_observation_dim": 286,
+  "action_dim": 29,
+  "parent": {
+    "taskId": "TASK_20261102_015",
+    "checkpoint": "model_3998.pt",
+    "sha256": "51972c753d805c18445bf865d4510c585b51da7a8a61b60be6a6137522c35716"
+  },
+  "single_delta": {
+    "reward": "feet_contact_planar_speed",
+    "weight": -0.2,
+    "force_threshold_N": 10,
+    "statistic": "sum_current_contact_body_planar_speed_norm"
+  },
+  "formal": {
+    "num_envs": 4096,
+    "additional_updates": 2000,
+    "save_interval": 250,
+    "seed": 1,
+    "expected_terminal_iteration": 5997
+  },
+  "preserved": "all154 actor/reference/target contract/physical guards/PD/PPO and command curriculum",
+  "quality_proxy_caveat": "body-speed reward is not actual contact-surface slip; full frozen C++ physical replay and exact surface diagnostic required"
+}
