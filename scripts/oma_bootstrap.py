@@ -11,12 +11,13 @@ ASSET_SHA='b514bc9ddd1039c29a0e6feea9f57f1503f6657d07d97a4ef8a7b11fbebe6674'
 CSV_SHA='51cf310f14ecbb8be1f41ea09345df0c89024ff884fb9ab881cac339f820c787'
 
 
-def validate_velocity_resume(checkpoint, motion_file):
+def validate_velocity_resume(checkpoint, motion_file, expected_dimension=160):
     """[OMA] Explicit same-interface/same-reference continuation; no migration."""
     import numpy as np
     import torch
     runtime=checkpoint['infos']['oma_runtime'];state=checkpoint['model_state_dict']
-    if runtime.get('format')!='beyondmimic_g1_velocity_runtime_v1':
+    expected_format='beyondmimic_g1_velocity_proprio_runtime_v1' if expected_dimension==154 else 'beyondmimic_g1_velocity_runtime_v1'
+    if runtime.get('format')!=expected_format:
         raise RuntimeError('Velocity continuation requires a velocity-schema parent')
     reference_sha=hashlib.sha256(Path(motion_file).read_bytes()).hexdigest()
     if runtime['reference_sha256']!=reference_sha:
@@ -24,11 +25,11 @@ def validate_velocity_resume(checkpoint, motion_file):
     with np.load(motion_file,allow_pickle=False) as data:
         if runtime['joint_names']!=data['joint_names'].tolist() or runtime['body_names']!=data['body_names'].tolist():
             raise RuntimeError('Velocity continuation articulation order differs')
-    if state['actor.0.weight'].shape[1]!=160 or state['critic.0.weight'].shape[1]!=286:
+    if state['actor.0.weight'].shape[1]!=expected_dimension or state['critic.0.weight'].shape[1]!=286:
         raise RuntimeError('Velocity continuation observation architecture differs')
     if not runtime['actor_obs_normalization'] or runtime.get('normalizer_epsilon',0)<=0:
         raise RuntimeError('Velocity continuation requires native observation normalization')
-    if state['actor_obs_normalizer._mean'].numel()!=160 or state['critic_obs_normalizer._mean'].numel()!=286:
+    if state['actor_obs_normalizer._mean'].numel()!=expected_dimension or state['critic_obs_normalizer._mean'].numel()!=286:
         raise RuntimeError('Velocity continuation normalizer dimension differs')
     if any(not torch.isfinite(value).all() for value in state.values()):
         raise RuntimeError('Non-finite parent model state')
@@ -39,10 +40,14 @@ def validate_velocity_resume(checkpoint, motion_file):
     count=int(state['actor_obs_normalizer.count'])
     if count<=0 or not optimizer_steps or max(optimizer_steps)<=0:
         raise RuntimeError('Parent optimizer/normalizer has no actual training history')
+    if expected_dimension==154:
+        c=runtime.get('actor_observation_contract',{})
+        if c.get('dimension')!=154 or c.get('requires_position_estimate') is not False or c.get('requires_linear_velocity_estimate') is not False:
+            raise RuntimeError('Incompatible154 observation contract')
     return {'schema':'explicit_velocity_continuation_v1','saved_iteration':int(checkpoint['iter']),
             'parent_normalizer_count':count,'parent_optimizer_step':max(optimizer_steps),
             'reference_sha256':reference_sha,'reference_matches':True,
-            'parent_command_limits':runtime['command_limits'],'architecture':[160,286,29]}
+            'parent_command_limits':runtime['command_limits'],'architecture':[expected_dimension,286,29]}
 
 
 def main():
@@ -56,9 +61,16 @@ def main():
     p.add_argument('--velocity_feet_contact_penalty',type=float,default=None,
                    help='[OMA] Explicitly authorize the one preregistered added foot-contact cost; must match native resolved weight')
     p.add_argument('--proprioceptive_actor',action='store_true',help='[OMA] Fresh deployment-observable154 actor; no160 migration')
+    p.add_argument('--proprio_resume',action='store_true',help='Explicit same154 architecture continuation; never160 migration')
+    p.add_argument('--deployment_target_limits',action='store_true',help='Native Core::targets contract, frozen from live deployment')
     args,extra=p.parse_known_args()
-    if args.proprioceptive_actor and (not args.velocity_reference or args.gm_resume_url or args.velocity_resume or args.native_crosscheck):
-        raise ValueError('Proprioceptive actor requires fresh velocity training; no implicit checkpoint migration')
+    if args.proprio_resume and not(args.proprioceptive_actor and args.velocity_resume and args.gm_resume_url):
+        raise ValueError('Explicit154 resume requires proprioceptive_actor,velocity_resume,parent URL/hash')
+    if args.deployment_target_limits and not args.proprioceptive_actor:
+        raise ValueError('Target alignment is only registered for154 actor')
+    if args.proprioceptive_actor and (not args.velocity_reference or args.native_crosscheck or
+            ((args.gm_resume_url or args.velocity_resume) and not args.proprio_resume)):
+        raise ValueError('154 training requires fresh initialization or explicit --proprio_resume; no160 migration')
     if args.velocity_feet_contact_penalty is not None:
         import math
         if not args.velocity_resume or not math.isfinite(args.velocity_feet_contact_penalty) or args.velocity_feet_contact_penalty>=0:
@@ -144,7 +156,7 @@ def main():
         subprocess.run([sys.executable,str(ROOT/'scripts/prepare_walkstop_motion.py'),'--input',str(converted),'--output',str(labeled)],check=True)
     print('[OMA] Stage: fixed-weight native evaluation' if args.native_crosscheck else '[OMA] Stage: native BeyondMimic PPO walk/hold/resume training',flush=True)
     train=ROOT/'scripts/rsl_rl/train.py'
-    argv=[sys.executable,str(train),'--task',('Tracking-VelocityReference-G1-Wo-State-Estimation-v0' if args.proprioceptive_actor else 'Tracking-VelocityReference-G1-v0' if args.velocity_reference else 'Tracking-WalkStop-G1-v0'),'--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
+    argv=[sys.executable,str(train),'--task',('Tracking-VelocityReference-G1-Proprio-Deploy-Limits-v0' if args.deployment_target_limits else 'Tracking-VelocityReference-G1-Wo-State-Estimation-v0' if args.proprioceptive_actor else 'Tracking-VelocityReference-G1-v0' if args.velocity_reference else 'Tracking-WalkStop-G1-v0'),'--motion_file',str(labeled),'--num_envs',str(args.num_envs),'--max_iterations',str(args.iterations),'--seed',str(args.seed),'--run_name',args.run_name,'--experiment_name','g1_walk_stop','--logger','tensorboard']
     if args.headless:argv.append('--headless')
     if args.gm_resume_url:
         # Match the native agent's actual experiment_name (g1_flat), not the
@@ -166,7 +178,10 @@ def main():
         checkpoint=torch.load(checkpoint_path,map_location='cpu',weights_only=True)
         runtime=checkpoint['infos']['oma_runtime']
         if args.velocity_resume:
-            provenance=validate_velocity_resume(checkpoint,labeled)
+            provenance=validate_velocity_resume(checkpoint,labeled,154 if args.proprio_resume else 160)
+            if args.deployment_target_limits:
+                os.environ['OMA_DEPLOYMENT_TARGET_DELTA']='shared_cpp_target_limits_v1'
+                provenance['authorized_target_processing_delta']='shared_cpp_target_limits_v1'
             provenance['parent_checkpoint_sha256']=args.checkpoint_sha256
             os.environ['OMA_VELOCITY_RESUME_PROVENANCE']=json.dumps(provenance)
             print('[OMA] Explicit velocity continuation verified: '+json.dumps(provenance),flush=True)

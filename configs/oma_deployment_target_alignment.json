@@ -1,0 +1,24 @@
+{
+  "design": "delta-exp-20261102-001",
+  "task": "Tracking-VelocityReference-G1-Proprio-Deploy-Limits-v0",
+  "actor_observation_dim": 154,
+  "critic_observation_dim": 286,
+  "action_dim": 29,
+  "control_contract": "configs/deployment_target_contract.json",
+  "initialization": "explicit154 warm continuation, parent TASK_20261031_114/model1999",
+  "smoke": {
+    "num_envs": 256,
+    "additional_updates": 64,
+    "save_interval": 16,
+    "seed": 1,
+    "expected_terminal_iteration": 2062
+  },
+  "formal": {
+    "num_envs": 4096,
+    "additional_updates": 2000,
+    "save_interval": 250,
+    "seed": 1,
+    "expected_terminal_iteration": 3998
+  },
+  "preserved": "reference/rewards/PPO/actor/raw action history/native effort/guards/command curriculum"
+}

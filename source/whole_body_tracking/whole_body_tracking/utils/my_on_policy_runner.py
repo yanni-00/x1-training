@@ -47,6 +47,9 @@ class MotionOnPolicyRunner(OnPolicyRunner):
             self._oma_runtime = collect_runtime(self.env, self.alg.policy)
             import json
             print("[OMA] Resolved reward parameters: " + json.dumps(self._oma_runtime["reward_parameters"]), flush=True)
+        action=self.env.unwrapped.action_manager.get_term("joint_pos")
+        if hasattr(action,"execution_snapshot"):
+            self._oma_runtime["native_action_execution"]=action.execution_snapshot()
         infos = dict(infos or {})
         infos["oma_runtime"] = self._oma_runtime
         super().save(path, infos)

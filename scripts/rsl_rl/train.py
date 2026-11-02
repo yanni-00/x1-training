@@ -140,6 +140,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     actor_audit = audit_native_observations(env)
     print("[OMA] Native actor observation audit: " + json.dumps(actor_audit), flush=True)
 
+    from whole_body_tracking.utils.deployment_limits import audit_deployment_action
+    target_audit=audit_deployment_action(env)
+    if target_audit is not None:print("[OMA] Native deployed-target audit: "+json.dumps(target_audit),flush=True)
+
     # create runner from rsl-rl
     runner = OnPolicyRunner(
         env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device, registry_name=registry_name
@@ -165,7 +169,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             current=collect_runtime(env,runner.alg.policy)
             import json
             authorized=json.loads(os.environ.get('OMA_VELOCITY_REWARD_DELTA','{}'))
-            validate_runtime_continuation(parent,current,authorized)
+            validate_runtime_continuation(parent,current,authorized,os.environ.get("OMA_DEPLOYMENT_TARGET_DELTA"))
             if authorized:print('[OMA] Explicit resolved continuation reward delta: '+json.dumps(authorized),flush=True)
             runner._oma_runtime=current
             print('[OMA] Actual continuation environment/reference/control match verified',flush=True)

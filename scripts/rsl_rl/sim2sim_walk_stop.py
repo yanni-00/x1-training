@@ -44,7 +44,17 @@ def main():
     p.add_argument("--checkpoint",required=True);p.add_argument("--protocol",required=True)
     p.add_argument("--output_dir",required=True);p.add_argument("--mjcf")
     p.add_argument("--no-video",action="store_true")
+    p.add_argument("--deployment-package",type=Path)
+    p.add_argument("--deployment-fixture",type=Path)
+    p.add_argument("--deployment-probe",type=Path)
+    p.add_argument("--deployment-tools",type=Path)
+    p.add_argument("--deployment-raw-targets-diagnostic",action="store_true")
     a = p.parse_args()
+    deploy_args=[a.deployment_package,a.deployment_fixture,a.deployment_probe,a.deployment_tools]
+    deployment_mode=all(x is not None for x in deploy_args)
+    if any(x is not None for x in deploy_args) and not deployment_mode:
+        p.error("All four deployment arguments are required together")
+    if a.deployment_raw_targets_diagnostic and not deployment_mode:p.error("Raw-target control requires shared deployment arguments")
     checkpoint = torch.load(a.checkpoint,map_location="cpu",weights_only=True)
     runtime = checkpoint["infos"]["oma_runtime"]
     module = ROOT/"source/whole_body_tracking/whole_body_tracking"
@@ -87,6 +97,16 @@ def main():
     mjcf = Path(a.mjcf) if a.mjcf else module/"assets/unitree_description/mjcf/g1.xml"
     model = mujoco.MjModel.from_xml_path(str(mjcf.resolve()));model.opt.timestep=physics_dt
     data = mujoco.MjData(model)
+    cpp=dcfg=None
+    if deployment_mode:
+        if not proprio_mode:raise ValueError("Shared deployment replay requires native154 checkpoint")
+        package=json.loads((a.deployment_package/"manifest.json").read_text())
+        if package["checkpoint_sha256"]!=hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest():
+            raise ValueError("Wrong shared deployment package/checkpoint")
+        dcfg=json.loads((a.deployment_fixture/"config.json").read_text())
+        if dcfg["joint_names"]!=names:raise ValueError("Deployment/native joint ordering mismatch")
+        for key in ["kp","kd","action_scale","default_joint_pos","effort_limit","armature"]:
+            np.testing.assert_array_equal(np.array(dcfg[key],np.float32),control[key])
     joint_ids = np.asarray([model.joint(n).id for n in names])
     qids = model.jnt_qposadr[joint_ids];vids = model.jnt_dofadr[joint_ids]
     if len(set(qids.tolist()))!=29:raise ValueError("MuJoCo joint map is not bijective")
@@ -107,6 +127,14 @@ def main():
     data.qvel[:]=0
     mujoco.mj_forward(model,data)
     out = Path(a.output_dir).resolve();out.mkdir(parents=True,exist_ok=True)
+    if deployment_mode:
+        Probe=load_module("verify_beyondmimic_walk",a.deployment_tools/"verify_beyondmimic_walk.py").Probe
+        cpp=Probe(a.deployment_probe,a.deployment_package,a.deployment_fixture/"config.txt",support_index,proprio=True)
+        sdk=np.array(dcfg["sdk_indices"])
+        def sensor_packet():
+            q=np.empty(29);dq=np.empty(29);q[sdk]=data.qpos[qids];dq[sdk]=data.qvel[vids]
+            return [*q,*dq,*data.qpos[3:7],*data.qvel[3:6]]
+        cpp.send("I",sensor_packet())
     header = ["step","time_s","stage","requested_go","reference_phase","reference_rate","reference_exhausted","terminated","root_x","root_y","root_z","root_vx","root_vy","root_vz","root_tilt_rad","reference_vx","reference_vy","reference_vz"]
     for side in ["left","right"]:header += [f"{side}_foot_{k}" for k in ["x","y","z","vx","vy","vz","fx","fy","fz"]]
     for prefix in ["q","dq","q_ref","dq_ref","action"]:header += [f"{prefix}__{n}" for n in names]
@@ -115,6 +143,7 @@ def main():
                    'effective_vx','effective_vy','effective_yaw_rate','walk_enabled','command_saturated',
                    'actual_body_vx','actual_body_vy','actual_body_vz','actual_yaw','target_yaw',
                    'actual_yaw_rate','reference_cycles','reference_root_x','reference_root_y']
+    header += ["limited_joints"]+[f"target__{name}" for name in names]
     # Abort limits are the existing BeyondMimic offline verifier settings.
     abort_height = protocol["abort_pelvis_height_m"];abort_tilt = protocol["abort_tilt_rad"]
     manifest = {"checkpoint":str(Path(a.checkpoint).resolve()),"checkpoint_sha256":hashlib.sha256(Path(a.checkpoint).read_bytes()).hexdigest(),
@@ -127,6 +156,18 @@ def main():
         "mujoco_version":mujoco.__version__,"video_requested":not a.no_video,"completed_steps":0,"completed_protocol":False,"terminated":False,"behavior_acceptance":False,
         "automatic_reset_policy":"Initialize once; abort at first physical failure; no reset during any GO/STOP switch.",
         "abort_limits_source":"1_G1_deploy-main/tools/verify_beyondmimic.py; explicit values frozen in protocol"}
+    manifest["target_source"]="live shared C++ joint/rate/PD-envelope limits" if deployment_mode else "raw affine targets; diagnostic only"
+    if a.deployment_raw_targets_diagnostic:manifest["target_source"]="raw affine targets with shared C++ observations/guards; diagnostic only"
+    manifest["shared_deployment_cpp"]=deployment_mode
+    manifest["observation_max_abs_error"]=0.
+    manifest["reference_max_abs_error"]=0.
+    manifest["limited_steps"]=0
+    if deployment_mode:
+        manifest["state_source"]="Shared deployment C++ IMU/joints/reference; truth only for evaluation"
+        manifest["deployment_probe_sha256"]=hashlib.sha256(a.deployment_probe.read_bytes()).hexdigest()
+        manifest["deployment_package"]=package
+        manifest["position_error_guard_used"]=False
+        manifest["leg_odometry_used"]=False
     manifest_path = out/"evaluation_manifest.json"
     manifest_path.write_text(json.dumps(manifest,indent=2)+"\n",encoding="utf-8")
     renderer=writer=None
@@ -149,6 +190,7 @@ def main():
                     if bool(stage['go']) != bool(enabled and np.linalg.norm(raw[:2])>0):
                         raise ValueError('GO label disagrees with the physical velocity command')
                     reference.request(torch.from_numpy(raw[None]),torch.tensor([enabled]))
+                    if deployment_mode:cpp.send("C",[*raw,int(enabled)])
                     # Request validates packet only; current state derivatives remain
                     # tied to the previous effective reference until the next step.
                     reference.root.command.copy_(reference.effective_command)
@@ -171,9 +213,28 @@ def main():
                         obs=np.concatenate([q_ref,dq_ref,anchor_r.T@(pos_ref[anchor]-data.xpos[anchor_id]),
                             (anchor_r.T@matrix(quat_ref[anchor]))[:,:2].reshape(-1),root_r.T@data.qvel[:3],data.qvel[3:6],
                             data.qpos[qids]-control["default_joint_pos"],data.qvel[vids],last_action]).astype(np.float32)
+                    if deployment_mode:
+                        if ((data.qpos[qids]<dcfg["joint_lower"])|(data.qpos[qids]>dcfg["joint_upper"])).any():
+                            terminated=True;reason="measured_joint_range_guard";break
+                        if not np.isfinite(data.qpos).all():
+                            terminated=True;reason="non_finite_physics";break
+                        actual=cpp.send("O",[0,*sensor_packet()])
+                        np.testing.assert_allclose(actual,obs,rtol=2e-4,atol=2e-4)
+                        manifest["observation_max_abs_error"]=max(manifest["observation_max_abs_error"],float(np.abs(actual-obs).max()))
+                        current=cpp.send("T")
+                        body_ids=[body_names.index(name)for name in dcfg["body_names"]]
+                        expected=np.concatenate([q_ref,dq_ref,pos_ref[body_ids].reshape(-1),quat_ref[body_ids].reshape(-1)])
+                        np.testing.assert_allclose(current[9:],expected,rtol=2e-4,atol=2e-4)
+                        manifest["reference_max_abs_error"]=max(manifest["reference_max_abs_error"],float(np.abs(current[9:]-expected).max()))
+                        obs=actual.astype(np.float32)
                     if obs.shape!=(actor.observation_dim,) or not np.isfinite(obs).all():raise ValueError("Invalid actual-state observation")
                     with torch.inference_mode():action=actor(torch.from_numpy(obs[None]))[0].numpy()
                     if not np.isfinite(action).all():raise ValueError("Non-finite model action")
+                    target=control["default_joint_pos"]+control["action_scale"]*action;limited=0
+                    if deployment_mode:
+                        limited_target=cpp.send("A",action);limited=int(limited_target[-1])
+                        if not a.deployment_raw_targets_diagnostic:target=limited_target[:29][sdk]
+                        manifest["limited_steps"]+=int(limited>0)
                     tilt=math.acos(float(np.clip(root_r[2,2],-1,1)))
                     row=[step,step*dt,stage["name"],int(stage["go"]),phase,rate,(0 if velocity_mode else int(clock.exhausted[0])),0,
                          *data.qpos[:3].tolist(),*data.qvel[:3].tolist(),tilt,*reference_v.tolist()]
@@ -196,14 +257,15 @@ def main():
                                 int(reference.saturated[0].any()),*body_v.tolist(),
                                 math.atan2(root_r[1,0],root_r[0,0]),float(reference.root.yaw[0]),
                                 float(omega_world[2]),int(clock.cycles[0]),*reference.root.position[0].tolist()]
+                    row += [limited,*target.tolist()]
                     if len(row)!=len(header):raise ValueError('Telemetry schema/row mismatch')
                     if writer is not None:
                         camera.lookat[:]=data.qpos[:3];renderer.update_scene(data,camera);writer.append_data(renderer.render())
-                    target=control["default_joint_pos"]+control["action_scale"]*action
                     for _ in range(runtime["decimation"]):
                         torque=np.clip(control["kp"]*(target-data.qpos[qids])-control["kd"]*data.qvel[vids],-control["effort_limit"],control["effort_limit"])
                         data.qfrc_applied[:]=0;data.qfrc_applied[vids]=torque;mujoco.mj_step(model,data)
                     last_action=action.copy()
+                    if deployment_mode:cpp.send("N")
                     if velocity_mode:reference.step(dt)
                     else:clock.step(torch.tensor([bool(stage["go"])]),dt)
                     tilt_after=math.acos(float(np.clip(matrix(data.qpos[3:7])[2,2],-1,1)))
@@ -215,6 +277,7 @@ def main():
                 f.flush()
                 if terminated:break
     finally:
+        if cpp is not None:cpp.close()
         if writer is not None:writer.close()
         if renderer is not None:renderer.close()
         manifest.update(completed_steps=step,completed_protocol=step==total and not terminated,terminated=terminated,termination_reason=reason)

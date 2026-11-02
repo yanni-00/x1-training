@@ -79,6 +79,8 @@ def collect_runtime(env, policy):
         raise RuntimeError("Invalid runtime control parameters")
     from .actor_observations import audit_native_observations
     actor_audit = audit_native_observations(env, policy)
+    from .deployment_limits import audit_deployment_action
+    target_contract=audit_deployment_action(env)
     proprio = bool(getattr(base.cfg, "oma_proprioceptive_actor", False))
     normalizer = getattr(policy, "actor_obs_normalizer", None)
     eps = getattr(normalizer, "eps", None)
@@ -86,6 +88,7 @@ def collect_runtime(env, policy):
         "format": ("beyondmimic_g1_velocity_proprio_runtime_v1" if proprio else
                    "beyondmimic_g1_velocity_runtime_v1" if velocity_mode else "beyondmimic_g1_runtime_v1"),
         "actor_observation_contract": actor_audit,
+        "deployment_target_contract":target_contract,
         **velocity_metadata,
         "joint_names": joint_names, "body_names": body_names,
         "tracked_body_names": list(command.cfg.body_names),
@@ -104,7 +107,7 @@ def collect_runtime(env, policy):
     }
 
 
-def validate_runtime_continuation(parent, current, allowed_reward_delta=None):
+def validate_runtime_continuation(parent, current, allowed_reward_delta=None, allowed_target_delta=None):
     """Require the actual new environment interface/control to match its parent."""
     for key in ['format','reference_sha256','joint_names','body_names','tracked_body_names',
                 'anchor_body_name','physics_dt','decimation','policy_dt','phase_acceleration',
@@ -118,4 +121,8 @@ def validate_runtime_continuation(parent, current, allowed_reward_delta=None):
     for key,old in parent['control'].items():
         if not torch.equal(old.cpu(),current['control'][key].cpu()):
             raise RuntimeError('Continuation native control differs: '+key)
-    return {'same_reference_interface_control':True}
+    before=parent.get('deployment_target_contract');after=current.get('deployment_target_contract')
+    if before!=after:
+        if before is not None or allowed_target_delta!='shared_cpp_target_limits_v1' or after is None or after.get('version')!=allowed_target_delta or after.get('applied_to_native_action') is not True:
+            raise RuntimeError('Unauthorized continuation target-processing delta')
+    return {'same_reference_interface_control':True,'authorized_target_processing_delta':allowed_target_delta}
