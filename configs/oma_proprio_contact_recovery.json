@@ -1,0 +1,23 @@
+{
+  "experiment": "exp-20261102-004",
+  "round": "r26",
+  "attempt": "recovery-001",
+  "sourceTaskId": "TASK_20261102_025",
+  "parentCheckpoint": {
+    "taskId": "TASK_20261102_025",
+    "path": "model_4500.pt",
+    "sha256": "747d0bab0a9cc4badbe53d8188f8191543184317fb3b22fb5fe313ec73383680",
+    "iteration": 4500,
+    "optimizerStep": 90060,
+    "normalizerCount": 442662912
+  },
+  "singleDeltaFromParent": "No learning change: same current-contact cost-0.2 is preserved; only resume interrupted remaining schedule on next account",
+  "task": "Tracking-VelocityReference-G1-Proprio-Deploy-Limits-v0",
+  "num_envs": 4096,
+  "additional_updates": 1498,
+  "save_interval": 250,
+  "seed": 1,
+  "expected_terminal_iteration": 5997,
+  "resume_boundary_caveat": "Saved iteration is after its update; restart replays one boundary label. This is recovery of unfinished schedule, not unchanged extension after poor behavior. Preserve expected final5997; actual optimizer/normalizer counts will be verified independently, not inferred from filename.",
+  "quality_gates": "unchanged from original r26"
+}
