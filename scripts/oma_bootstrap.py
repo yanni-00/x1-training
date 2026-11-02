@@ -60,6 +60,9 @@ def main():
     p.add_argument('--velocity_resume',action='store_true',help='[OMA] Explicit compatible velocity-task continuation with exact reference/architecture guards')
     p.add_argument('--velocity_feet_contact_penalty',type=float,default=None,
                    help='[OMA] Explicitly authorize the one preregistered added foot-contact cost; must match native resolved weight')
+    p.add_argument('--velocity_pelvis_weight',type=float,default=None,
+                   help='[OMA] Explicit new pelvis-only velocity reward; requires paired std and native resolved audit')
+    p.add_argument('--velocity_pelvis_std',type=float,default=None)
     p.add_argument('--proprioceptive_actor',action='store_true',help='[OMA] Fresh deployment-observable154 actor; no160 migration')
     p.add_argument('--proprio_resume',action='store_true',help='Explicit same154 architecture continuation; never160 migration')
     p.add_argument('--deployment_target_limits',action='store_true',help='Native Core::targets contract, frozen from live deployment')
@@ -71,14 +74,29 @@ def main():
     if args.proprioceptive_actor and (not args.velocity_reference or args.native_crosscheck or
             ((args.gm_resume_url or args.velocity_resume) and not args.proprio_resume)):
         raise ValueError('154 training requires fresh initialization or explicit --proprio_resume; no160 migration')
+    reward_delta={}
     if args.velocity_feet_contact_penalty is not None:
         import math
         if not args.velocity_resume or not math.isfinite(args.velocity_feet_contact_penalty) or args.velocity_feet_contact_penalty>=0:
             raise ValueError('Contact-cost delta requires explicit compatible resume and finite negative weight')
-        os.environ['OMA_VELOCITY_REWARD_DELTA']=json.dumps({'feet_contact_planar_speed':{
+        reward_delta['feet_contact_planar_speed']={
             'weight':args.velocity_feet_contact_penalty,'force_threshold':10.0,
             'statistic':'sum_current_contact_body_planar_speed_norm',
-            'body_names':['left_ankle_roll_link','right_ankle_roll_link']}})
+            'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+    if (args.velocity_pelvis_weight is None)!=(args.velocity_pelvis_std is None):
+        raise ValueError('Pelvis velocity reward requires both explicit weight and std')
+    if args.velocity_pelvis_weight is not None:
+        import math
+        if not (args.proprio_resume and args.deployment_target_limits and
+                math.isfinite(args.velocity_pelvis_weight) and args.velocity_pelvis_weight>0 and
+                math.isfinite(args.velocity_pelvis_std) and args.velocity_pelvis_std>0):
+            raise ValueError('Pelvis reward requires explicit native-limited154 resume and positive finite coefficients')
+        reward_delta['motion_pelvis_lin_vel']={
+            'weight':args.velocity_pelvis_weight,'std':args.velocity_pelvis_std,
+            'command_name':'motion','body_names':['pelvis'],
+            'statistic':'motion_global_body_linear_velocity_error_exp'}
+    if reward_delta:
+        os.environ['OMA_VELOCITY_REWARD_DELTA']=json.dumps(reward_delta)
     if args.velocity_resume and not (args.velocity_reference and args.gm_resume_url):
         raise ValueError('Velocity resume requires explicit velocity task and parent URL/checksum')
     if args.velocity_reference and (args.native_crosscheck or (args.gm_resume_url and not args.velocity_resume)):

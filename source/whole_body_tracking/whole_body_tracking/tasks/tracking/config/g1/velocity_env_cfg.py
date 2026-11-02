@@ -15,6 +15,10 @@ class VelocityReferenceRewardsCfg(RewardsCfg):
         params={'asset_cfg':SceneEntityCfg('robot',body_names=['left_ankle_roll_link','right_ankle_roll_link'],preserve_order=True),
                 'sensor_cfg':SceneEntityCfg('contact_forces',body_names=['left_ankle_roll_link','right_ankle_roll_link'],preserve_order=True),
                 'force_threshold':10.0})
+    # Explicit opt-in only: old tasks keep the original weighted objective.
+    motion_pelvis_lin_vel=RewTerm(
+        func=mdp.motion_global_body_linear_velocity_error_exp,weight=0.0,
+        params={'command_name':'motion','std':0.3,'body_names':['pelvis']})
 
 
 @configclass

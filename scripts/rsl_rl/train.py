@@ -144,6 +144,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     target_audit=audit_deployment_action(env)
     if target_audit is not None:print("[OMA] Native deployed-target audit: "+json.dumps(target_audit),flush=True)
 
+    from whole_body_tracking.utils.oma_checkpoint import audit_reward_parameters
+    reward_parameters,reward_audits=audit_reward_parameters(
+        env.unwrapped,env.unwrapped.command_manager.get_term('motion'))
+    print('[OMA] Native reward parameters audit: '+json.dumps(
+        {'resolved':reward_parameters,'audits':reward_audits}),flush=True)
+
     # create runner from rsl-rl
     runner = OnPolicyRunner(
         env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device, registry_name=registry_name

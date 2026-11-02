@@ -1,10 +1,62 @@
 """[OMA] Exact motion/control state needed by the existing MuJoCo play path."""
 import hashlib
+import inspect
 import json
+import math
 import os
 from pathlib import Path
 import numpy as np
 import torch
+
+
+def audit_reward_parameters(base, command):
+    """Inspect the live reward manager; a CLI request alone is not execution proof."""
+    rewards=base.cfg.rewards
+    parameters={'motion_body_lin_vel':{
+        'weight':float(rewards.motion_body_lin_vel.weight),
+        'std':float(rewards.motion_body_lin_vel.params['std'])}}
+    foot_term=getattr(rewards,'feet_contact_planar_speed',None)
+    if foot_term is not None and foot_term.weight != 0:
+        parameters['feet_contact_planar_speed']={
+            'weight':float(foot_term.weight),'force_threshold':float(foot_term.params['force_threshold']),
+            'statistic':'sum_current_contact_body_planar_speed_norm',
+            'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+    audits={}
+    term=getattr(rewards,'motion_pelvis_lin_vel',None)
+    if term is not None and term.weight != 0:
+        weight,std=float(term.weight),float(term.params['std'])
+        if not (math.isfinite(weight) and weight>0 and math.isfinite(std) and std>0):
+            raise RuntimeError('Invalid pelvis velocity reward coefficient')
+        if term.params.get('body_names')!=['pelvis'] or term.params.get('command_name')!='motion':
+            raise RuntimeError('Pelvis velocity reward must select only motion/pelvis')
+        source=Path(__file__).resolve().parents[1]/'tasks/tracking/mdp/rewards.py'
+        if (term.func.__name__!='motion_global_body_linear_velocity_error_exp' or
+                Path(inspect.getsourcefile(term.func) or '').resolve()!=source):
+            raise RuntimeError('Unexpected pelvis velocity reward implementation')
+        manager=base.reward_manager
+        if 'motion_pelvis_lin_vel' not in manager.active_terms:
+            raise RuntimeError('Requested pelvis reward absent from native manager')
+        live=manager.get_term_cfg('motion_pelvis_lin_vel')
+        if live.weight!=term.weight or live.params!=term.params or live.func is not term.func:
+            raise RuntimeError('Native pelvis reward differs from resolved configuration')
+        names=list(command.cfg.body_names)
+        selected=[i for i,name in enumerate(names) if name=='pelvis']
+        if len(selected)!=1:
+            raise RuntimeError('Pelvis reward requires exactly one native tracked pelvis')
+        reference,actual=command.body_lin_vel_w,command.robot_body_lin_vel_w
+        if (reference.shape!=actual.shape or reference.ndim!=3 or
+                reference.shape[-2:]!=(len(names),3) or
+                not torch.isfinite(reference).all() or not torch.isfinite(actual).all()):
+            raise RuntimeError('Invalid native body velocity tensors for pelvis reward')
+        parameters['motion_pelvis_lin_vel']={
+            'weight':weight,'std':std,'command_name':'motion','body_names':['pelvis'],
+            'statistic':'motion_global_body_linear_velocity_error_exp'}
+        audits['motion_pelvis_lin_vel']={
+            'enabled_in_native_manager':True,'selected_body_names':['pelvis'],
+            'selected_body_indices':selected,'tracked_body_count':len(names),
+            'native_velocity_shape':list(actual.shape),'function':term.func.__name__,
+            'source_sha256':hashlib.sha256(source.read_text(encoding='utf-8').encode()).hexdigest()}
+    return parameters,audits
 
 
 def collect_runtime(env, policy):
@@ -51,15 +103,8 @@ def collect_runtime(env, policy):
         raise RuntimeError("Non-finite runtime reference")
     if len(body_names) != motion["body_pos_w"].shape[1]:
         raise RuntimeError("Checkpoint reference body order mismatch")
-    reward_parameters={'motion_body_lin_vel':{
-        'weight':float(base.cfg.rewards.motion_body_lin_vel.weight),
-        'std':float(base.cfg.rewards.motion_body_lin_vel.params['std'])}}
-    foot_term=getattr(base.cfg.rewards,'feet_contact_planar_speed',None)
-    if foot_term is not None and foot_term.weight != 0:
-        reward_parameters['feet_contact_planar_speed']={
-            'weight':float(foot_term.weight),'force_threshold':float(foot_term.params['force_threshold']),
-            'statistic':'sum_current_contact_body_planar_speed_norm',
-            'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+    reward_parameters,reward_audits=audit_reward_parameters(base,command)
+    velocity_metadata['reward_audits']=reward_audits
     velocity_metadata['authorized_reward_delta']=json.loads(os.environ.get('OMA_VELOCITY_REWARD_DELTA','{}'))
     action = base.action_manager.get_term("joint_pos")
     scale = action._scale
@@ -115,7 +160,7 @@ def validate_runtime_continuation(parent, current, allowed_reward_delta=None, al
         if parent[key] != current[key]:raise RuntimeError('Continuation runtime differs: '+key)
     previous=dict(parent['reward_parameters']);resolved=dict(current['reward_parameters'])
     for key,expected in (allowed_reward_delta or {}).items():
-        if key!='feet_contact_planar_speed' or key in previous or resolved.pop(key,None)!=expected:
+        if key not in {'feet_contact_planar_speed','motion_pelvis_lin_vel'} or key in previous or resolved.pop(key,None)!=expected:
             raise RuntimeError('Unauthorized or mismatched continuation reward delta: '+key)
     if previous!=resolved:raise RuntimeError('Continuation runtime differs: reward_parameters')
     for key,old in parent['control'].items():
