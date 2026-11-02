@@ -22,6 +22,28 @@ def audit_reward_parameters(base, command):
             'statistic':'sum_current_contact_body_planar_speed_norm',
             'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
     audits={}
+    requested=json.loads(os.environ.get('OMA_VELOCITY_REWARD_DELTA','{}')).get('feet_contact_planar_speed',{})
+    if requested.get('kind')=='strengthen_existing_contact_cost_v1':
+        if foot_term is None or parameters.get('feet_contact_planar_speed')!=requested.get('after'):
+            raise RuntimeError('Native reweighted contact cost differs from requested after state')
+        manager=base.reward_manager
+        if 'feet_contact_planar_speed' not in manager.active_terms:
+            raise RuntimeError('Reweighted contact cost absent from native reward manager')
+        live=manager.get_term_cfg('feet_contact_planar_speed')
+        source=Path(__file__).resolve().parents[1]/'tasks/tracking/mdp/rewards.py'
+        if (live.weight!=foot_term.weight or live.params!=foot_term.params or live.func is not foot_term.func or
+                foot_term.func.__name__!='feet_contact_planar_speed' or
+                Path(inspect.getsourcefile(foot_term.func) or '').resolve()!=source):
+            raise RuntimeError('Reweighted contact cost native function/config mismatch')
+        names=['left_ankle_roll_link','right_ankle_roll_link']
+        for selector,entity in [('asset_cfg','robot'),('sensor_cfg','contact_forces')]:
+            cfg=live.params[selector]
+            if cfg.name!=entity or list(cfg.body_names)!=names or not cfg.preserve_order:
+                raise RuntimeError('Reweighted contact cost native bilateral selector mismatch')
+        audits['feet_contact_planar_speed']={
+            'enabled_in_native_manager':True,'resolved_weight':float(live.weight),
+            'selected_body_names':names,'function':foot_term.func.__name__,
+            'source_sha256':hashlib.sha256(source.read_text(encoding='utf-8').encode()).hexdigest()}
     term=getattr(rewards,'motion_pelvis_lin_vel',None)
     if term is not None and term.weight != 0:
         weight,std=float(term.weight),float(term.params['std'])
@@ -160,7 +182,23 @@ def validate_runtime_continuation(parent, current, allowed_reward_delta=None, al
         if parent[key] != current[key]:raise RuntimeError('Continuation runtime differs: '+key)
     previous=dict(parent['reward_parameters']);resolved=dict(current['reward_parameters'])
     for key,expected in (allowed_reward_delta or {}).items():
-        if key not in {'feet_contact_planar_speed','motion_pelvis_lin_vel'} or key in previous or resolved.pop(key,None)!=expected:
+        if expected.get('kind')=='strengthen_existing_contact_cost_v1':
+            if (key!='feet_contact_planar_speed' or len(allowed_reward_delta)!=1 or
+                    set(expected)!={'kind','before','after'} or
+                    previous.get(key)!=expected['before'] or resolved.get(key)!=expected['after']):
+                raise RuntimeError('Unauthorized or mismatched existing contact reweight')
+            before,after=dict(expected['before']),dict(expected['after'])
+            old_weight,new_weight=before.pop('weight'),after.pop('weight')
+            canonical={'force_threshold':10.0,'statistic':'sum_current_contact_body_planar_speed_norm',
+                       'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+            if (before!=canonical or after!=canonical or
+                    not (math.isfinite(old_weight) and math.isfinite(new_weight) and new_weight<old_weight<0)):
+                raise RuntimeError('Contact reweight must only strengthen same existing bilateral cost')
+            if not (parent['format']=='beyondmimic_g1_velocity_proprio_runtime_v1' and
+                    parent.get('deployment_target_contract',{}).get('applied_to_native_action') is True):
+                raise RuntimeError('Contact reweight requires existing native-limited154 parent')
+            previous.pop(key);resolved.pop(key)
+        elif key not in {'feet_contact_planar_speed','motion_pelvis_lin_vel'} or key in previous or resolved.pop(key,None)!=expected:
             raise RuntimeError('Unauthorized or mismatched continuation reward delta: '+key)
     if previous!=resolved:raise RuntimeError('Continuation runtime differs: reward_parameters')
     for key,old in parent['control'].items():

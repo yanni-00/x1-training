@@ -60,6 +60,9 @@ def main():
     p.add_argument('--velocity_resume',action='store_true',help='[OMA] Explicit compatible velocity-task continuation with exact reference/architecture guards')
     p.add_argument('--velocity_feet_contact_penalty',type=float,default=None,
                    help='[OMA] Explicitly authorize the one preregistered added foot-contact cost; must match native resolved weight')
+    p.add_argument('--velocity_feet_contact_reweight',type=float,default=None,
+                   help='Explicitly strengthen existing contact cost; paired previous weight and exact native parent required')
+    p.add_argument('--velocity_feet_contact_previous_weight',type=float,default=None)
     p.add_argument('--velocity_pelvis_weight',type=float,default=None,
                    help='[OMA] Explicit new pelvis-only velocity reward; requires paired std and native resolved audit')
     p.add_argument('--velocity_pelvis_std',type=float,default=None)
@@ -83,6 +86,22 @@ def main():
             'weight':args.velocity_feet_contact_penalty,'force_threshold':10.0,
             'statistic':'sum_current_contact_body_planar_speed_norm',
             'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+    if (args.velocity_feet_contact_reweight is None)!=(args.velocity_feet_contact_previous_weight is None):
+        raise ValueError('Contact reweight requires both new and previous explicit weight')
+    if args.velocity_feet_contact_reweight is not None:
+        import math
+        old_weight,new_weight=args.velocity_feet_contact_previous_weight,args.velocity_feet_contact_reweight
+        if not (args.proprio_resume and args.deployment_target_limits and
+                math.isfinite(old_weight) and math.isfinite(new_weight) and new_weight<old_weight<0):
+            raise ValueError('Contact reweight requires native-limited154 resume and strictly stronger finite negative cost')
+        if (args.velocity_feet_contact_penalty is not None or args.velocity_pelvis_weight is not None or
+                args.velocity_pelvis_std is not None):
+            raise ValueError('Existing contact reweight cannot mix with new reward additions')
+        common={'force_threshold':10.0,'statistic':'sum_current_contact_body_planar_speed_norm',
+                'body_names':['left_ankle_roll_link','right_ankle_roll_link']}
+        reward_delta['feet_contact_planar_speed']={
+            'kind':'strengthen_existing_contact_cost_v1',
+            'before':dict(common,weight=old_weight),'after':dict(common,weight=new_weight)}
     if (args.velocity_pelvis_weight is None)!=(args.velocity_pelvis_std is None):
         raise ValueError('Pelvis velocity reward requires both explicit weight and std')
     if args.velocity_pelvis_weight is not None:
