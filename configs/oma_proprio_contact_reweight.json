@@ -13,5 +13,6 @@
   "seed": 1,
   "expected_final": 7996,
   "reference_sha256": "c039dc5cacaf2483ad42d46a8fbe05f4048661899bde10529cea04eb6fb6fd47",
-  "scope": "directed single coefficient test, original functional/contact/fullvideo gates; no baseline replacement without clear gain"
+  "scope": "directed single coefficient test, original functional/contact/fullvideo gates; no baseline replacement without clear gain",
+  "audit_fix": "Semantic native scene selectors, resolved IDs and tensor/function execution; learning settings unchanged from r28"
 }

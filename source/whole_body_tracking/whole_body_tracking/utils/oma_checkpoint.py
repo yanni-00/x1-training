@@ -9,6 +9,68 @@ import numpy as np
 import torch
 
 
+def audit_native_contact_reweight(base, declared, expected):
+    """Compare semantics across ManagerBase deepcopy/SceneEntityCfg resolution."""
+    manager=base.reward_manager
+    if 'feet_contact_planar_speed' not in manager.active_terms:
+        raise RuntimeError('Reweighted contact cost absent from native reward manager')
+    live=manager.get_term_cfg('feet_contact_planar_speed')
+    source=Path(__file__).resolve().parents[1]/'tasks/tracking/mdp/rewards.py'
+    if not (math.isfinite(live.weight) and live.weight==declared.weight==expected['weight']):
+        raise RuntimeError('Reweighted contact cost native weight mismatch')
+    if (live.func is not declared.func or live.func.__name__!='feet_contact_planar_speed' or
+            Path(inspect.getsourcefile(live.func) or '').resolve()!=source):
+        raise RuntimeError('Reweighted contact cost native function/source mismatch')
+    keys={'asset_cfg','sensor_cfg','force_threshold'}
+    if set(live.params)!=keys or set(declared.params)!=keys:
+        raise RuntimeError('Reweighted contact cost native parameter keys mismatch')
+    if not (math.isfinite(live.params['force_threshold']) and
+            live.params['force_threshold']==declared.params['force_threshold']==expected['force_threshold']):
+        raise RuntimeError('Reweighted contact cost native force threshold mismatch')
+    names=['left_ankle_roll_link','right_ankle_roll_link']
+    resolved={}
+    selected={}
+    for selector,entity_name,field in [('asset_cfg','robot','body_lin_vel_w'),
+                                        ('sensor_cfg','contact_forces','net_forces_w')]:
+        requested,cfg=declared.params[selector],live.params[selector]
+        for state in (requested,cfg):
+            if state.name!=entity_name or state.body_names!=names or state.preserve_order is not True:
+                raise RuntimeError('Reweighted contact cost native bilateral selector mismatch: '+selector)
+        entity=base.scene[entity_name]
+        entity_names=list(entity.body_names)
+        if any(entity_names.count(name)!=1 for name in names):
+            raise RuntimeError('Reweighted contact cost native body names missing/duplicated: '+selector)
+        expected_ids=[entity_names.index(name) for name in names]
+        if isinstance(cfg.body_ids,slice):
+            indices=list(range(len(entity_names)))[cfg.body_ids]
+        elif isinstance(cfg.body_ids,(list,tuple)):
+            indices=list(cfg.body_ids)
+        else:
+            raise RuntimeError('Reweighted contact cost unresolved native body IDs: '+selector)
+        if indices!=expected_ids:
+            raise RuntimeError('Reweighted contact cost native resolved body IDs mismatch: '+selector)
+        data=getattr(entity.data,field)
+        if data.ndim!=3 or data.shape[1:]!=(len(entity_names),3):
+            raise RuntimeError('Reweighted contact cost native body tensor shape mismatch: '+selector)
+        value=data[:,indices,:]
+        if not torch.isfinite(value).all():
+            raise RuntimeError('Reweighted contact cost nonfinite native body tensors: '+selector)
+        selected[selector]=value
+        resolved[selector]={'entity':entity_name,'body_names':names,'body_ids':indices,
+                            'native_selected_shape':list(value.shape)}
+    if selected['asset_cfg'].shape!=selected['sensor_cfg'].shape:
+        raise RuntimeError('Reweighted contact cost native asset/sensor batch mismatch')
+    cost=live.func(base,**live.params)
+    if (cost.shape!=(selected['asset_cfg'].shape[0],) or
+            not torch.isfinite(cost).all() or (cost<0).any()):
+        raise RuntimeError('Reweighted contact cost native execution invalid')
+    return {'enabled_in_native_manager':True,'resolved_weight':float(live.weight),
+            'selected_body_names':names,'resolved_entities':resolved,
+            'function':live.func.__name__,'native_cost_shape':list(cost.shape),
+            'native_cost_finite_nonnegative':True,
+            'source_sha256':hashlib.sha256(source.read_text(encoding='utf-8').encode()).hexdigest()}
+
+
 def audit_reward_parameters(base, command):
     """Inspect the live reward manager; a CLI request alone is not execution proof."""
     rewards=base.cfg.rewards
@@ -26,24 +88,7 @@ def audit_reward_parameters(base, command):
     if requested.get('kind')=='strengthen_existing_contact_cost_v1':
         if foot_term is None or parameters.get('feet_contact_planar_speed')!=requested.get('after'):
             raise RuntimeError('Native reweighted contact cost differs from requested after state')
-        manager=base.reward_manager
-        if 'feet_contact_planar_speed' not in manager.active_terms:
-            raise RuntimeError('Reweighted contact cost absent from native reward manager')
-        live=manager.get_term_cfg('feet_contact_planar_speed')
-        source=Path(__file__).resolve().parents[1]/'tasks/tracking/mdp/rewards.py'
-        if (live.weight!=foot_term.weight or live.params!=foot_term.params or live.func is not foot_term.func or
-                foot_term.func.__name__!='feet_contact_planar_speed' or
-                Path(inspect.getsourcefile(foot_term.func) or '').resolve()!=source):
-            raise RuntimeError('Reweighted contact cost native function/config mismatch')
-        names=['left_ankle_roll_link','right_ankle_roll_link']
-        for selector,entity in [('asset_cfg','robot'),('sensor_cfg','contact_forces')]:
-            cfg=live.params[selector]
-            if cfg.name!=entity or list(cfg.body_names)!=names or not cfg.preserve_order:
-                raise RuntimeError('Reweighted contact cost native bilateral selector mismatch')
-        audits['feet_contact_planar_speed']={
-            'enabled_in_native_manager':True,'resolved_weight':float(live.weight),
-            'selected_body_names':names,'function':foot_term.func.__name__,
-            'source_sha256':hashlib.sha256(source.read_text(encoding='utf-8').encode()).hexdigest()}
+        audits['feet_contact_planar_speed']=audit_native_contact_reweight(base,foot_term,requested['after'])
     term=getattr(rewards,'motion_pelvis_lin_vel',None)
     if term is not None and term.weight != 0:
         weight,std=float(term.weight),float(term.params['std'])

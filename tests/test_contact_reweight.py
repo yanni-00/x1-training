@@ -27,16 +27,40 @@ c=copy.deepcopy(current);c['reward_parameters']['motion_pelvis_lin_vel']={'weigh
 m.validate_runtime_continuation(parent,copy.deepcopy(parent))
 # Audit the actual function code/source and live manager; no simulator install needed.
 f=P/'tasks/tracking/mdp/rewards.py';tree=ast.parse(f.read_text());node=next(n for n in tree.body if isinstance(n,ast.FunctionDef)and n.name=='feet_contact_planar_speed');mod=ast.Module(body=[ast.ImportFrom(module='__future__',names=[ast.alias(name='annotations')],level=0),node],type_ignores=[]);ast.fix_missing_locations(mod);ns={};exec(compile(mod,str(f),'exec'),ns);S=types.SimpleNamespace
-params={'force_threshold':10.,'asset_cfg':S(name='robot',body_names=before['body_names'],preserve_order=True),'sensor_cfg':S(name='contact_forces',body_names=before['body_names'],preserve_order=True)}
-term=S(weight=-.3,params=params,func=ns['feet_contact_planar_speed']);manager=S(active_terms=['feet_contact_planar_speed'],get_term_cfg=lambda name:term)
-base=S(cfg=S(rewards=S(motion_body_lin_vel=S(weight=1.,params={'std':1.}),feet_contact_planar_speed=term,motion_pelvis_lin_vel=S(weight=0))),reward_manager=manager)
+# A manager owns a deepcopy whose body IDs are resolved; declarations stay unresolved.
+class Scene(dict):
+ pass
+asset=S(body_names=['torso_link','right_ankle_roll_link','left_ankle_roll_link'],data=S(body_lin_vel_w=torch.zeros(2,3,3)))
+sensor=S(body_names=['left_ankle_roll_link','torso_link','right_ankle_roll_link'],data=S(net_forces_w=torch.zeros(2,3,3)))
+asset.data.body_lin_vel_w[0,2,0]=.1;asset.data.body_lin_vel_w[1,1,1]=.2
+sensor.data.net_forces_w[0,0,2]=20.;sensor.data.net_forces_w[1,2,2]=20.
+scene=Scene(robot=asset,contact_forces=sensor);scene.sensors={'contact_forces':sensor}
+params={'force_threshold':10.,'asset_cfg':S(name='robot',body_names=before['body_names'],preserve_order=True,body_ids=slice(None)),'sensor_cfg':S(name='contact_forces',body_names=before['body_names'],preserve_order=True,body_ids=slice(None))}
+term=S(weight=-.3,params=params,func=ns['feet_contact_planar_speed']);live=copy.deepcopy(term)
+live.params['asset_cfg'].body_ids=[2,1];live.params['sensor_cfg'].body_ids=[0,2]
+assert live.params!=term.params,'Regression must reproduce the formerly rejected valid lifecycle'
+manager=S(active_terms=['feet_contact_planar_speed'],get_term_cfg=lambda name:live)
+base=S(scene=scene,cfg=S(rewards=S(motion_body_lin_vel=S(weight=1.,params={'std':1.}),feet_contact_planar_speed=term,motion_pelvis_lin_vel=S(weight=0))),reward_manager=manager)
+helper_name='whole_body_tracking.utils.contact_quality';helper_spec=importlib.util.spec_from_file_location(helper_name,P/'utils/contact_quality.py');helper=importlib.util.module_from_spec(helper_spec);sys.modules[helper_name]=helper;helper_spec.loader.exec_module(helper)
 os.environ['OMA_VELOCITY_REWARD_DELTA']=json.dumps(delta)
-resolved,audits=m.audit_reward_parameters(base,None);assert audits['feet_contact_planar_speed']['resolved_weight']==-.3 and resolved['feet_contact_planar_speed']==after
+resolved,audits=m.audit_reward_parameters(base,None);audit=audits['feet_contact_planar_speed']
+assert audit['resolved_weight']==-.3 and resolved['feet_contact_planar_speed']==after
+assert audit['resolved_entities']['asset_cfg']['body_ids']==[2,1]
+assert audit['resolved_entities']['sensor_cfg']['body_ids']==[0,2]
+assert audit['native_cost_shape']==[2]and audit['native_cost_finite_nonnegative']
+torch.testing.assert_close(live.func(base,**live.params),torch.tensor([.1,.2]))
+assert term.params['asset_cfg'].body_ids==slice(None),'Audit must not mutate unresolved declarations'
 manager.active_terms=[];reject(lambda:m.audit_reward_parameters(base,None));manager.active_terms=['feet_contact_planar_speed']
-wrong=copy.deepcopy(term);wrong.weight=-.4;manager.get_term_cfg=lambda name:wrong;reject(lambda:m.audit_reward_parameters(base,None));manager.get_term_cfg=lambda name:term
-term.params['sensor_cfg'].body_names=['left_ankle_roll_link'];reject(lambda:m.audit_reward_parameters(base,None));term.params['sensor_cfg'].body_names=before['body_names']
+wrong=copy.deepcopy(live);wrong.weight=-.4;manager.get_term_cfg=lambda name:wrong;reject(lambda:m.audit_reward_parameters(base,None));manager.get_term_cfg=lambda name:live
+for selector,wrong_ids in [('asset_cfg',[1,2]),('sensor_cfg',[2,0]),('asset_cfg',slice(None))]:
+ good=live.params[selector].body_ids;live.params[selector].body_ids=wrong_ids
+ reject(lambda:m.audit_reward_parameters(base,None));live.params[selector].body_ids=good
+live.params['force_threshold']=20.;reject(lambda:m.audit_reward_parameters(base,None));live.params['force_threshold']=10.
+live.params['sensor_cfg'].body_names=['left_ankle_roll_link'];reject(lambda:m.audit_reward_parameters(base,None));live.params['sensor_cfg'].body_names=before['body_names']
+live.func=lambda:None;reject(lambda:m.audit_reward_parameters(base,None));live.func=term.func
+asset.data.body_lin_vel_w[0,2,0]=float('nan');reject(lambda:m.audit_reward_parameters(base,None));asset.data.body_lin_vel_w[0,2,0]=.1
 os.environ.pop('OMA_VELOCITY_REWARD_DELTA')
 r=subprocess.run([sys.executable,str(R/'scripts/oma_bootstrap.py'),'--velocity_feet_contact_reweight','-.3'],capture_output=True,text=True);assert r.returncode and 'both new and previous' in r.stderr
 # Reject weakening before simulator/network startup.
 r=subprocess.run([sys.executable,str(R/'scripts/oma_bootstrap.py'),'--proprioceptive_actor','--velocity_reference','--velocity_resume','--proprio_resume','--deployment_target_limits','--gm_resume_url','invalid-not-fetched','--velocity_feet_contact_reweight','-.1','--velocity_feet_contact_previous_weight','-.2'],capture_output=True,text=True);assert r.returncode and 'strictly stronger' in r.stderr
-print('PASS actual5997 parent exact scalar strengthening; all unauthorized changes rejected; native active/function/selector checks; legacy nochange; CLI negatives before network/simulator')
+print('PASS actual5997 parent exact scalar strengthening; all unauthorized changes rejected; actual deepcopy/resolved lifecycle with separate asset/sensor IDs; native function execution and all unsafe selectors rejected; legacy nochange; CLI negatives before network/simulator')
