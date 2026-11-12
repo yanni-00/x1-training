@@ -1,5 +1,5 @@
 {
-  "training_enabled": false,
+  "training_enabled": true,
   "evaluation_enabled": false,
   "physical_model": "owner_baseline",
   "authorization_source": "2026-11-12 current chat: submit only 50 Hz no-filter stage-one training with owner-supplied PD, then pause; owner monitors",

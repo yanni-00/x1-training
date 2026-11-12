@@ -4,16 +4,44 @@
   "task": "f1_walk_stage1",
   "source": "2026-11-12 current chat: owner supplied KP/KD, selected 50 Hz without filters, then authorized stage-one submission only; owner monitors training.",
   "gain_semantics": "joint-space torque PD: KP N*m/rad; KD N*m*s/rad; user design inputs, not identified or validated optima",
-  "sides": ["left", "right"],
-  "joint_groups": ["hip_pitch_joint", "hip_roll_joint", "hip_yaw_joint", "knee_pitch_joint", "ankle_pitch_joint", "ankle_roll_joint"],
-  "kp": [65, 88, 100, 81, 40, 100],
-  "kd": [6.5, 6.5, 13, 6.5, 1.5, 5.5],
+  "sides": [
+    "left",
+    "right"
+  ],
+  "joint_groups": [
+    "hip_pitch_joint",
+    "hip_roll_joint",
+    "hip_yaw_joint",
+    "knee_pitch_joint",
+    "ankle_pitch_joint",
+    "ankle_roll_joint"
+  ],
+  "kp": [
+    65,
+    88,
+    100,
+    81,
+    40,
+    100
+  ],
+  "kd": [
+    6.5,
+    6.5,
+    13,
+    6.5,
+    1.5,
+    5.5
+  ],
   "policy_hz": 50,
   "sim_dt_s": 0.001,
   "sim_dt_source": "training/humanoid/envs/f1/f1_config.py:F1WalkingCfg.sim.dt (preserved)",
   "decimation": 20,
   "decimation_derivation": "1 / (policy_hz * sim_dt_s)",
-  "filters": {"action_lowpass": false, "serial_position_lowpass": false, "ankle_torque_lowpass": false},
+  "filters": {
+    "action_lowpass": false,
+    "serial_position_lowpass": false,
+    "ankle_torque_lowpass": false
+  },
   "initialization": "from_scratch",
   "max_iterations": 5000,
   "iterations_source": "docs/success_route_README.md:stage one; training/humanoid/envs/f1/f1_config.py:F1WalkingCfgPPO.runner.max_iterations",
@@ -24,5 +52,15 @@
   "automatic_next_round": false,
   "physical_model_decision": "2026-11-12 owner reply: derived URDF with joint friction 0 and damping 0.05, no identification injection, added rotor model, filter or delay",
   "physical_model_file": "configs/owner_baseline_model.json",
-  "submission_status": "not_submitted"
+  "submission_status": "submitted",
+  "submission": {
+    "taskId": "TASK_20261112_281",
+    "projectId": "PRO_20261112_011",
+    "account_email": "limxmvq028awebohms@maxxspace.com",
+    "image": "BJX00000001/V000021 (isaac-gym-gm-v14)",
+    "code_branch": "f1-walking-stage1 @ github.com/yanni-00/x1-training",
+    "commit": "3730515ccfb4f4dd43b956f48abfaed574b87da6",
+    "created_at": "2026-11-12",
+    "note": "Earlier create TASK_20261112_279 on the default keychain account could not run (1002056 insufficient balance, never executed); pool account 14 (gift50) used instead."
+  }
 }
