@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "status": "pending",
+  "robot": "F1-12DOF",
+  "urdf_sha256": "41e5390633358e6e06dd8bf9c70cc36469312cf1da2d596842dfe9fbaf0c1267",
+  "sources": [],
+  "passive_dynamics": {
+    "mode": "preserve_urdf",
+    "explicit_friction_semantics": null
+  },
+  "joints": {
+    "left_hip_pitch_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_hip_roll_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_hip_yaw_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_knee_pitch_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_ankle_pitch_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_ankle_roll_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_hip_pitch_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_hip_roll_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_hip_yaw_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_knee_pitch_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_ankle_pitch_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_ankle_roll_joint": {
+      "armature": null,
+      "coulomb": null,
+      "viscous": null,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    }
+  },
+  "delivery": {
+    "enabled": null,
+    "joint_names": [
+      "left_ankle_pitch_joint",
+      "left_ankle_roll_joint",
+      "right_ankle_pitch_joint",
+      "right_ankle_roll_joint"
+    ],
+    "tau_s": null
+  }
+}

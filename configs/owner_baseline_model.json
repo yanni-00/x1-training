@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "kind": "owner_baseline",
+  "robot": "F1-12DOF",
+  "source": "2026-11-12 owner current-chat reply: URDF joint friction 0, damping 0.05; provided PD only; no other identification injected.",
+  "source_urdf": "resources/robots/f1/urdf/SYS-SPEC-0003-V1.1-F1整机模型12DOF.urdf",
+  "source_urdf_sha256": "41e5390633358e6e06dd8bf9c70cc36469312cf1da2d596842dfe9fbaf0c1267",
+  "urdf_relative_path": "resources/robots/f1/urdf/f1_12dof_owner_f0_d005.urdf",
+  "urdf_sha256": "70e728a94f63032d9355afcf6fb473640e1235e1122417ffa71a9c066019c710",
+  "robot_contract_sha256": "da6bff92888ffc763add98069d3cd8b121eff486ac2d22927a4453cec6c4444e",
+  "profile_file": "configs/stage1_50hz_no_filter.json",
+  "joint_names": [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_pitch_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_pitch_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint"
+  ],
+  "changes": [
+    {
+      "joint": "left_hip_pitch_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "left_hip_roll_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "left_hip_yaw_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "left_knee_pitch_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "left_ankle_pitch_joint",
+      "before": {
+        "damping": "0.1",
+        "friction": "0.2"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "left_ankle_roll_joint",
+      "before": {
+        "damping": "0.1",
+        "friction": "0.2"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "right_hip_pitch_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "right_hip_roll_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "right_hip_yaw_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "right_knee_pitch_joint",
+      "before": {
+        "damping": "0.3",
+        "friction": "0.5"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "right_ankle_pitch_joint",
+      "before": {
+        "damping": "0.1",
+        "friction": "0.2"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    },
+    {
+      "joint": "right_ankle_roll_joint",
+      "before": {
+        "damping": "0.1",
+        "friction": "0.2"
+      },
+      "after": {
+        "damping": 0.05,
+        "friction": 0.0
+      }
+    }
+  ],
+  "identification_injected": false,
+  "extra_armature_enabled": false,
+  "explicit_friction_enabled": false,
+  "delay_enabled": false,
+  "posture_rotor_model_enabled": false,
+  "delivery": {
+    "enabled": false
+  }
+}

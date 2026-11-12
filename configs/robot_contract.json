@@ -1,0 +1,326 @@
+{
+  "robot_name": "F1_12dof",
+  "joint_names": [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_pitch_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_pitch_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint"
+  ],
+  "joint_properties": {
+    "left_hip_pitch_joint": {
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0 0.06945 0",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": -1.5708,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "left_hip_roll_joint": {
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0.02835 0.08505 0",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": -0.349066,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "left_hip_yaw_joint": {
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin": {
+        "xyz": "-0.03835 0 -0.10005",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": -1.5708,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "left_knee_pitch_joint": {
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0.01 0.02845 -0.13595",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": 0.0,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "left_ankle_pitch_joint": {
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0 -0.02695 -0.33",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 241.875,
+        "velocity": 7.57244,
+        "lower": -0.523599,
+        "upper": 0.523599
+      },
+      "dynamics": {
+        "damping": 0.1,
+        "friction": 0.2
+      }
+    },
+    "left_ankle_roll_joint": {
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0 0 0",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 218.4,
+        "velocity": 8.05007,
+        "lower": -0.523599,
+        "upper": 0.523599
+      },
+      "dynamics": {
+        "damping": 0.1,
+        "friction": 0.2
+      }
+    },
+    "right_hip_pitch_joint": {
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0 -0.06945 0",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": -1.5708,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "right_hip_roll_joint": {
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0.02835 -0.08505 0",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": -1.5708,
+        "upper": 0.349066
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "right_hip_yaw_joint": {
+      "axis": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin": {
+        "xyz": "-0.03835 0 -0.10005",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": -1.5708,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "right_knee_pitch_joint": {
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0.01 -0.02845 -0.13595",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 130.0,
+        "velocity": 14.6608,
+        "lower": 0.0,
+        "upper": 1.5708
+      },
+      "dynamics": {
+        "damping": 0.3,
+        "friction": 0.5
+      }
+    },
+    "right_ankle_pitch_joint": {
+      "axis": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0 0.02695 -0.33",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 241.875,
+        "velocity": 7.57244,
+        "lower": -0.523599,
+        "upper": 0.523599
+      },
+      "dynamics": {
+        "damping": 0.1,
+        "friction": 0.2
+      }
+    },
+    "right_ankle_roll_joint": {
+      "axis": [
+        1.0,
+        0.0,
+        0.0
+      ],
+      "origin": {
+        "xyz": "0 0 0",
+        "rpy": "0 0 0"
+      },
+      "limit": {
+        "effort": 218.4,
+        "velocity": 8.05007,
+        "lower": -0.523599,
+        "upper": 0.523599
+      },
+      "dynamics": {
+        "damping": 0.1,
+        "friction": 0.2
+      }
+    }
+  },
+  "initial_pose": {
+    "default_joint_angles": {
+      "left_hip_pitch_joint": -0.2864993599235938,
+      "left_hip_roll_joint": 0.0,
+      "left_hip_yaw_joint": 0.0,
+      "left_knee_pitch_joint": 0.49,
+      "left_ankle_pitch_joint": -0.20350064007640617,
+      "left_ankle_roll_joint": 0.0,
+      "right_hip_pitch_joint": -0.2864993599235938,
+      "right_hip_roll_joint": 0.0,
+      "right_hip_yaw_joint": 0.0,
+      "right_knee_pitch_joint": 0.49,
+      "right_ankle_pitch_joint": -0.20350064007640617,
+      "right_ankle_roll_joint": 0.0
+    },
+    "base_position": [
+      0.0,
+      0.0,
+      0.583229178925448
+    ],
+    "feet_to_ankle_distance": 0.03365828626726475,
+    "sole_offsets_by_side": {
+      "left": 0.03365828626726475,
+      "right": 0.03365828626726475
+    },
+    "feet_floor_before_base_translation": {
+      "left": -0.583229178925448,
+      "right": -0.583229178925448
+    },
+    "base_height_target": 0.583229178925448
+  },
+  "swing_joint_delta": [
+    -0.25,
+    0.05,
+    -0.11,
+    0.35,
+    -0.16,
+    0.0,
+    -0.25,
+    -0.05,
+    0.11,
+    0.35,
+    -0.16,
+    0.0
+  ],
+  "provenance": {
+    "knee_flexion_source": "4_locomotion-lab_gitlab/experience/success_routes/X1_20260902_参数辨识+低抬脚步态/exp_add_all_parameter_new_urdf_damping_0_reward_v1/humanoid/envs/x1/x1_dh_stand_config.py:init_state.default_joint_angles.left_knee_pitch_joint",
+    "swing_magnitudes_source": "4_locomotion-lab_gitlab/experience/success_routes/X1_20260902_参数辨识+低抬脚步态/exp_add_all_parameter_new_urdf_damping_0_reward_v1/humanoid/envs/x1/x1_dh_stand_config.py:rewards.final_swing_joint_delta_pos",
+    "pose_method": "roll/yaw=URDF zero; preserve route knee flexion; solve sagittal ankle x=hip_pitch origin x; sum pitch angles=0; base z=-minimum transformed sole collision vertex z",
+    "foot_offset_method": "negative minimum z of scaled collision STL vertices in ankle_roll frame; scalar is mean of both sides",
+    "swing_sign_method": "F1 URDF +Y hip_pitch on both sides; use negative swing pitch, preserve source magnitudes and other mirror pairs",
+    "validation_scope": "static engineering initialization only; no dynamic or identified hardware claim"
+  },
+  "urdf_relative_path": "resources/robots/f1/urdf/SYS-SPEC-0003-V1.1-F1整机模型12DOF.urdf",
+  "urdf_sha256": "41e5390633358e6e06dd8bf9c70cc36469312cf1da2d596842dfe9fbaf0c1267"
+}
