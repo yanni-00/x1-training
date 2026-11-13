@@ -9,7 +9,8 @@ class F1OnPolicyRunner(DHOnPolicyRunner):
         super().save(path, infos)
         write_checkpoint_metadata(path, self.env.cfg.asset.name, self.it + 1,
                                   getattr(self, 'parent_checkpoint', None),
-                                  physical_model=getattr(self.env.cfg, 'owner_physical_model', None))
+                                  physical_model=getattr(self.env.cfg, 'owner_physical_model', None),
+                                  goal_revision=getattr(self.env.cfg.env, 'goal_revision', 'F1-WALK-v1'))
 
     def load(self, path, load_optimizer=True):
         path, metadata = verify_checkpoint(path)

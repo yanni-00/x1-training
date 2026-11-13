@@ -190,11 +190,12 @@ def verify_checkpoint(path, required_task=None, required_iteration=None):
     return path, metadata
 
 
-def write_checkpoint_metadata(path, task, iteration, parent=None, physical_model=None):
+def write_checkpoint_metadata(path, task, iteration, parent=None, physical_model=None,
+                              goal_revision='F1-WALK-v1'):
     if task not in TASKS:
         raise ValueError('Unknown F1 checkpoint task')
     metadata = {'schema_version': 1, 'robot': 'F1-12DOF', 'task': task,
-                'goal_revision': 'F1-WALK-v1', 'iteration': int(iteration),
+                'goal_revision': goal_revision, 'iteration': int(iteration),
                 'urdf_sha256': ROBOT_CONTRACT['urdf_sha256'],
                 'robot_contract_sha256': sha256(ROBOT_FILE),
                 'identification_sha256': sha256(IDENTIFICATION_FILE),
