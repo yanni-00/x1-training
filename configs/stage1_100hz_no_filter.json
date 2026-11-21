@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task": "f1_walk_stage1",
+  "recipe": "task054_target_speed_ramp",
+  "base_commit": "4832bc65cd231a781fd195d3a2f0115fb78f224d",
+  "policy_hz": 100,
+  "sim_dt_s": 0.001,
+  "decimation": 10,
+  "history_policy_step_stride": 2,
+  "source_observation_period_s": 0.02,
+  "source_rollout_steps": 24,
+  "filters": {
+    "action_lowpass": false,
+    "serial_position_lowpass": false,
+    "ankle_torque_lowpass": false
+  },
+  "pd_profile": "configs/stage1_50hz_no_filter.json",
+  "physical_model": "configs/owner_baseline_model.json",
+  "initialization": "from_scratch_for_first_frequency_comparison",
+  "training_updates_source": "Explicit per-experiment budget passed with --max_iterations"
+}

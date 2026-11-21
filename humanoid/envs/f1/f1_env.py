@@ -474,11 +474,11 @@ class F1WalkingEnv(LeggedRobot):
         self.obs_history.append(obs_now)
         self.critic_history.append(privileged_obs_buf)
 
-        obs_buf_all = torch.stack([self.obs_history[i]
-                                   for i in range(self.obs_history.maxlen)], dim=1)  # N,T,K
+        history_stride = getattr(self.cfg.env, 'observation_history_stride', 1)
+        obs_buf_all = torch.stack(tuple(self.obs_history)[::history_stride], dim=1)  # N,T,K
 
         self.obs_buf = obs_buf_all.reshape(self.num_envs, -1)  # N, T*K
-        self.privileged_obs_buf = torch.cat([self.critic_history[i] for i in range(self.cfg.env.c_frame_stack)], dim=1)
+        self.privileged_obs_buf = torch.cat(tuple(self.critic_history)[::history_stride], dim=1)
 
     def reset_idx(self, env_ids):
         """ Reset some environments.

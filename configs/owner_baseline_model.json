@@ -8,7 +8,7 @@
   "urdf_relative_path": "resources/robots/f1/urdf/f1_12dof_owner_f0_d005.urdf",
   "urdf_sha256": "70e728a94f63032d9355afcf6fb473640e1235e1122417ffa71a9c066019c710",
   "robot_contract_sha256": "da6bff92888ffc763add98069d3cd8b121eff486ac2d22927a4453cec6c4444e",
-  "profile_file": "configs/stage1_50hz_no_filter.json",
+  "profile_file": "configs/stage1_100hz_no_filter.json",
   "joint_names": [
     "left_hip_pitch_joint",
     "left_hip_roll_joint",
