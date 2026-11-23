@@ -17,6 +17,11 @@ class F1CommandCoverageCfg(F1Stage1NoFilter50HzCfg):
         # The dedicated modes/timing ranges already exist in the Q3 route.
         gait = ['walk_sagittal', 'walk_lateral', 'rotate', 'stand', 'walk_omnidirectional']
         gait_time_range = dict(F1LowLiftCfg.commands.gait_time_range)
+        # Stop-settle round: the 25 s replay's 5 s zero hold exposed a
+        # turn -> stop failure while the trained stand segment lasted only
+        # 2-3 s. Extend the stand segment to cover the full stop duration;
+        # no other sampler, reward, control or timing change.
+        gait_time_range['stand'] = [5, 6]
 
 
 class F1CommandCoverageEnv(F1CleanStopEnv):
