@@ -23,6 +23,10 @@ class F1LateralLandingTimingEnv(F1LateralLandingEnv):
     def _init_buffers(self):
         super()._init_buffers()
         self._timing = new_timing_state(self.num_envs, self.device)
+
+    def _prepare_reward_function(self):
+        # episode_sums is created by the base prepare step, after _init_buffers.
+        super()._prepare_reward_function()
         self.episode_sums['lateral_landing_timing'] = torch.zeros(
             self.num_envs, device=self.device, dtype=torch.float)
 
