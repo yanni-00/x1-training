@@ -21,10 +21,11 @@ class F1LateralSwingDirectionCfg(F1TargetSpeedRampCfg):
 
     class rewards(F1TargetSpeedRampCfg.rewards):
         class scales(F1TargetSpeedRampCfg.rewards.scales):
-            # Weight derivation: per late swing (0.25 s ramp, 0.3 s airborne)
-            # the sum of dt*ramp*progress is about 0.15*0.5*progress. At
-            # progress 0.5 that is 0.0375 per swing, 2 swings per 0.7 s cycle,
-            # so weight 20 gives about 1.5 per cycle against tracking_lin_vel
+            # Weight derivation: the framework multiplies this scale by one
+            # control dt. Per late swing (0.25 s ramp, 0.3 s airborne) the raw
+            # term is about 15 steps * avg(ramp*progress) ~ 15*0.25 = 3.75 at
+            # progress 0.5, so the paid bonus is 20*dt*3.75 = 0.75 per swing,
+            # 2 swings per 0.7 s cycle -> 1.5 per cycle against tracking_lin_vel
             # 1.26 per cycle: the same order as the sparse landing round.
             lateral_swing_direction = 20.0
 
@@ -59,6 +60,6 @@ class F1LateralSwingDirectionEnv(F1TargetSpeedRampEnv):
         toward = torch.sign(self.commands[:, 1:2]) * foot_vel_body[..., 1]
         reward = swing_direction_step(swing, toward, self._swing_air_time, gate,
                                       cfg.lateral_swing_direction_v_ref,
-                                      cfg.lateral_swing_direction_ramp_s, self.dt)
+                                      cfg.lateral_swing_direction_ramp_s)
         self._swing_air_time = update_air_time(self._swing_air_time, swing, self.dt)
         return reward
