@@ -24,10 +24,11 @@ class F1LateralSwingDirectionCfg(F1TargetSpeedRampCfg):
             # Weight derivation: the framework multiplies this scale by one
             # control dt. Per late swing (0.25 s ramp, 0.3 s airborne) the raw
             # term is about 15 steps * avg(ramp*progress) ~ 15*0.25 = 3.75 at
-            # progress 0.5, so the paid bonus is 20*dt*3.75 = 0.75 per swing,
-            # 2 swings per 0.7 s cycle -> 1.5 per cycle against tracking_lin_vel
-            # 1.26 per cycle: the same order as the sparse landing round.
-            lateral_swing_direction = 20.0
+            # progress 0.5, so the paid bonus is W*dt*3.75 per swing. r10 at
+            # W=20 produced 2.5-3.6 cm advances and 0.04 m/s body drift; the
+            # weight 60 round tests whether 3x strength converts to the 0.24
+            # m/s gate without breaking the guards.
+            lateral_swing_direction = 60.0
 
         lateral_swing_direction_v_ref = 0.4
         lateral_swing_direction_ramp_s = 0.25
