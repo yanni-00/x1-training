@@ -1,4 +1,4 @@
-"""Continue F1 50 Hz stage one from the r21 swing-direction checkpoint with the owner-gated rearward pitch penalty."""
+"""r24: continue from r21_5000 with the r22 reward set plus the pure-forward sampling curriculum."""
 
 import argparse
 from contextlib import ExitStack
@@ -77,8 +77,8 @@ def train(log_root, parent, metadata):
     from humanoid.algo.ppo.actor_critic_f1_equivariant import register_policy_class
     from humanoid.envs import task_registry
     from humanoid.envs.f1.f1_equivariant_config import F1EquivariantCfgPPO
-    from humanoid.envs.f1.f1_rearward_pitch_gate import (
-        F1RearwardPitchGateCfg, F1RearwardPitchGateEnv)
+    from humanoid.envs.f1.f1_forward_curriculum import (
+        F1ForwardCurriculumCfg, F1ForwardCurriculumEnv)
     from humanoid.utils import get_args
 
     args = get_args()
@@ -87,8 +87,8 @@ def train(log_root, parent, metadata):
     if args.max_iterations is None or args.max_iterations <= 0:
         raise ValueError('Specify a positive number of additional updates')
     register_policy_class()
-    task_registry.register(args.task, F1RearwardPitchGateEnv,
-                           F1RearwardPitchGateCfg(), F1EquivariantCfgPPO())
+    task_registry.register(args.task, F1ForwardCurriculumEnv,
+                           F1ForwardCurriculumCfg(), F1EquivariantCfgPPO())
     env, cfg = task_registry.make_env(name=args.task, args=args)
     if cfg.domain_rand.enable_delivery or cfg.sim.dt * cfg.control.decimation != 1 / 50:
         raise ValueError('Effective controls differ from the 50 Hz no-filter baseline')
@@ -107,6 +107,8 @@ def train(log_root, parent, metadata):
     print('[F1 policy] ' + train_cfg.runner.policy_class_name, flush=True)
     print('[F1 pitch gate] rearward_pitch_penalty=' + str(cfg.rewards.rearward_pitch_penalty) +
           ' wz_threshold=' + str(cfg.rewards.rearward_pitch_wz_threshold), flush=True)
+    print('[F1 curriculum] gait=' + json.dumps(cfg.commands.gait) +
+          ' gait_time_range=' + json.dumps(cfg.commands.gait_time_range), flush=True)
     print(f'[F1 parent] {PARENT_TASK} {metadata["checkpoint_sha256"]} at {PARENT_ITERATION}, fresh optimizer',
           flush=True)
     runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=False)
