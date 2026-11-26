@@ -19,7 +19,11 @@ class F1RearwardPitchGateCfg(F1LateralSwingDirection50HzCfg):
         # Additional penalty coefficient applied to the rearward gravity
         # component inside _reward_orientation (framework multiplies the
         # orientation scale by dt; this factor scales the extra deduction).
-        rearward_pitch_penalty = 2.0
+        # r23: 2.0 -> 30. r22 measured ~8.5% gate-on training steps and
+        # 0.012/step paid deduction, 20-60x below the swing-direction term;
+        # 30 lifts the deduction at the observed -14.7 deg lean to
+        # 30*0.254*0.02 = 0.152/step, the same order as the lateral gains.
+        rearward_pitch_penalty = 30.0
         rearward_pitch_wz_threshold = 0.1
 
 
