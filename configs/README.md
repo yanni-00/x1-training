@@ -1,6 +1,18 @@
 # F1 参数接口
 
-当前 `parameter_identification.json` 是待填模板，`status=pending`。没有 F1 实测数据，禁止以旧 X1 数值、典型值或估算填充。
+当前 `parameter_identification.json` 为 F1 100 Hz 辨识版配置。它绑定原 005 URDF 和用户确认的参数，包含两路随机纯延迟、踝关节力矩低通和名义 Kp/Kd。辨识的三个量固定取配置中的名义值。
+
+## Gradmotion 训练交接
+
+提交前固定本分支的实际 Git 提交，按 OMA 核对任务准入和 GM 账号预算。GM 代码目录为 `x1-training` 时使用以下启动命令。
+
+```shell
+gm-run x1-training/humanoid/scripts/train_stage1_identified_100hz.py --task f1_walk_stage1 --headless --num_envs 4096 --seed 5 --max_iterations 6000 --run_name f1_walking_100hz_identified_6000
+```
+
+入口使用 r11 最终策略与奖励，从随机初始化训练。启动日志中核对 `[F1 timing]`、`[F1 dynamics]` 和 `[F1 profile]`。保留 `model_3000.pt`、`model_4500.pt` 和 `model_6000.pt` 及各自的 `.f1.json` sidecar。平台若只归档权重，需在同一训练输出中另行保留 sidecar。
+
+在训练仓库根目录运行 `python -m humanoid.scripts.play --task f1_walk_stage1 --checkpoint_path <本版权重>` 可做定性回放。量化验收沿用旧 r11 的协议和工况，对比前进、横移、转向后停步及提前终止。旧基线对应 `TASK_20261125_569` 的 `model_6000`，使用其原始提交和物理配置回放。
 
 ## 冻结资产
 
@@ -25,10 +37,10 @@ URDF 和 meshes 保持用户指定版本原字节；任何后续模型改变均�
 | `passive_dynamics.explicit_friction_semantics` | 额外显式摩擦非零时，必须明确为 `additional_to_urdf`；若辨识的是总摩擦，应先分离语义，不能双计 |
 | `delivery.enabled` | 辨识结果明确给出是否启用 LPF，不由旧 X1 设置推断 |
 | `delivery.joint_names` | 用关节名映射，禁止依赖未知索引 |
-| `delivery.tau_s` | 启用时为实测正时间常数（秒）；本实现要求不小于 sim.dt，否则需审核离散滤波实现 |
+| `delivery.tau_s` | 启用时为用户确认的正时间常数（秒），要求不小于 sim.dt |
 
 注入后程序将 nominal / range 按 F1 关节顺序转换为每关节 armature 和显式摩擦配置。play 侧使用相同 nominal，忽略其 DR 区间；保留原力矩顺序 PD → delivery LPF → 显式摩擦 → 力矩限幅。
-参数文件的数据就绪、用户启动授权、OMA 暂停权限和正式 preflight 是不同条件。填写参数不打开 `launch.json`，不创建训练任务，也不解除 `.oma/loop.json` 暂停。
+代码侧通过 `launch.json` 选择辨识版。正式 GM 提交须核对独立的 OMA 准入和用户授权。
 
 ## 两阶段 checkpoint
 

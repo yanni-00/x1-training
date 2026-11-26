@@ -1,119 +1,186 @@
 {
   "schema_version": 1,
-  "status": "pending",
+  "status": "ready",
   "robot": "F1-12DOF",
-  "urdf_sha256": "41e5390633358e6e06dd8bf9c70cc36469312cf1da2d596842dfe9fbaf0c1267",
-  "sources": [],
+  "profile": "stage1_100hz_identified",
+  "urdf_relative_path": "resources/robots/f1/urdf/f1_12dof_owner_f0_d005.urdf",
+  "urdf_sha256": "70e728a94f63032d9355afcf6fb473640e1235e1122417ffa71a9c066019c710",
+  "sources": [
+    {
+      "file": "Owner-provided Python parameter table and selections in the F1 100 Hz handoff chat",
+      "fields": [
+        "A_8116 = 197e-6 * 18^2; A_4315 = 25e-6 * 36^2",
+        "ankle pitch armature = 2 * A_4315 * 1.64^2; ankle roll armature = 2 * A_4315 * 1.00^2",
+        "data[].kp, data[].kd, data[].B and data[].Fc; final overrides knee B/Fc 0.45/0.60 and ankle roll Kp/Kd 45/2.3",
+        "ankle PD torque low-pass time constant 0.007 s"
+      ]
+    },
+    {
+      "file": "resources/robots/f1/urdf/f1_12dof_owner_f0_d005.urdf",
+      "fields": [
+        "actuated joints/dynamics/@damping = 0.05",
+        "actuated joints/dynamics/@friction = 0"
+      ]
+    },
+    {
+      "file": "4_locomotion-lab_gitlab/experience/success_routes/X1_20260902_参数辨识+低抬脚步态/exp_add_all_parameter_new_urdf_damping_0_reward_v1/humanoid/envs/x1/x1_dh_stand_config.py",
+      "fields": [
+        "X1DHStandCfg.sim.dt; X1DHStandCfg.domain_rand.lag_timesteps_range and dof_lag_timesteps_range"
+      ]
+    }
+  ],
   "passive_dynamics": {
     "mode": "preserve_urdf",
-    "explicit_friction_semantics": null
+    "explicit_friction_semantics": "additional_to_urdf",
+    "viscous_conversion": "owner total B minus the 005 URDF viscous damping of 0.05 for each actuated joint"
   },
-  "joints": {
-    "left_hip_pitch_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
+  "control": {
+    "stiffness": {
+      "hip_pitch_joint": 70.0,
+      "hip_roll_joint": 70.0,
+      "hip_yaw_joint": 90.0,
+      "knee_pitch_joint": 90.0,
+      "ankle_pitch_joint": 60.0,
+      "ankle_roll_joint": 45.0
     },
-    "left_hip_roll_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "left_hip_yaw_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "left_knee_pitch_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "left_ankle_pitch_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "left_ankle_roll_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "right_hip_pitch_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "right_hip_roll_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "right_hip_yaw_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "right_knee_pitch_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "right_ankle_pitch_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
-    },
-    "right_ankle_roll_joint": {
-      "armature": null,
-      "coulomb": null,
-      "viscous": null,
-      "armature_range": null,
-      "coulomb_range": null,
-      "viscous_range": null
+    "damping": {
+      "hip_pitch_joint": 9.5,
+      "hip_roll_joint": 9.0,
+      "hip_yaw_joint": 4.2,
+      "knee_pitch_joint": 7.0,
+      "ankle_pitch_joint": 4.3,
+      "ankle_roll_joint": 2.3
     }
   },
+  "action_and_feedback_delay": {
+    "physics_step_s": 0.001,
+    "action_steps": [
+      5,
+      40
+    ],
+    "joint_feedback_steps": [
+      0,
+      40
+    ]
+  },
   "delivery": {
-    "enabled": null,
+    "enabled": true,
+    "tau_s": 0.007,
     "joint_names": [
       "left_ankle_pitch_joint",
       "left_ankle_roll_joint",
       "right_ankle_pitch_joint",
       "right_ankle_roll_joint"
-    ],
-    "tau_s": null
+    ]
+  },
+  "training": {
+    "task": "f1_walk_stage1",
+    "num_envs": 4096,
+    "seed": 5,
+    "max_iterations": 6000
+  },
+  "behavior_reference": {
+    "round": "r11",
+    "source_commit": "99856cfd6ea667da875c32222b1d653c8cc61ea8",
+    "gm_task": "TASK_20261125_569",
+    "checkpoint_iteration": 6000
+  },
+  "joints": {
+    "left_hip_pitch_joint": {
+      "armature": 0.063828,
+      "coulomb": 1.2195,
+      "viscous": 0.313,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_hip_roll_joint": {
+      "armature": 0.063828,
+      "coulomb": 1.2195,
+      "viscous": 0.313,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_hip_yaw_joint": {
+      "armature": 0.063828,
+      "coulomb": 0.6205,
+      "viscous": 0.0325,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_knee_pitch_joint": {
+      "armature": 0.063828,
+      "coulomb": 0.6,
+      "viscous": 0.4,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_ankle_pitch_joint": {
+      "armature": 0.17428608,
+      "coulomb": 0.5427,
+      "viscous": 0.6868,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "left_ankle_roll_joint": {
+      "armature": 0.0648,
+      "coulomb": 0.3716,
+      "viscous": 0.4303,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_hip_pitch_joint": {
+      "armature": 0.063828,
+      "coulomb": 1.2195,
+      "viscous": 0.313,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_hip_roll_joint": {
+      "armature": 0.063828,
+      "coulomb": 1.2195,
+      "viscous": 0.313,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_hip_yaw_joint": {
+      "armature": 0.063828,
+      "coulomb": 0.6205,
+      "viscous": 0.0325,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_knee_pitch_joint": {
+      "armature": 0.063828,
+      "coulomb": 0.6,
+      "viscous": 0.4,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_ankle_pitch_joint": {
+      "armature": 0.17428608,
+      "coulomb": 0.5427,
+      "viscous": 0.6868,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    },
+    "right_ankle_roll_joint": {
+      "armature": 0.0648,
+      "coulomb": 0.3716,
+      "viscous": 0.4303,
+      "armature_range": null,
+      "coulomb_range": null,
+      "viscous_range": null
+    }
   }
 }

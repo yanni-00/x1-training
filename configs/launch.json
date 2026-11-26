@@ -1,7 +1,7 @@
 {
   "training_enabled": true,
-  "evaluation_enabled": false,
-  "physical_model": "owner_baseline",
-  "authorization_source": "Owner authorized one from-scratch 3000-update formal Gradmotion simulation.",
-  "reason": "Isolated TASK054-derived F1 100 Hz no-filter training."
+  "evaluation_enabled": true,
+  "physical_model": "identified_100hz",
+  "authorization_source": "Owner approved implementing the from-scratch configuration for a Gradmotion handoff. Submission and monitoring are assigned to a separate session.",
+  "reason": "F1 100 Hz r11-derived strategy with identified actuator parameters, added delays and ankle PD torque low-pass."
 }

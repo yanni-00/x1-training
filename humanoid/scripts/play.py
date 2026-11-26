@@ -3,7 +3,7 @@ from humanoid.f1_contract import assert_run_admission, verify_checkpoint
 
 
 def main():
-    assert_run_admission('evaluation')
+    physical = assert_run_admission('evaluation')
     import isaacgym  # noqa: F401
     import torch
     from humanoid.envs import task_registry
@@ -12,7 +12,12 @@ def main():
     args = get_args()
     if not args.checkpoint_path:
         raise ValueError('Replay requires --checkpoint_path for a checkpoint produced by this F1 loop')
-    path, _ = verify_checkpoint(args.checkpoint_path, required_task=args.task)
+    path, metadata = verify_checkpoint(args.checkpoint_path, required_task=args.task)
+    if physical.get('profile') == 'stage1_100hz_identified':
+        from humanoid.envs.f1.f1_identified_100hz import register_identified_task
+        if args.task != physical['training']['task'] or metadata['identification_sha256'] is None:
+            raise ValueError('Replay requires a checkpoint for the identified 100 Hz profile')
+        register_identified_task(physical)
     env_cfg, train_cfg = task_registry.get_cfgs(args.task)
     env_cfg.env.execution_mode = 'evaluation'
     env_cfg.env.num_envs = 1

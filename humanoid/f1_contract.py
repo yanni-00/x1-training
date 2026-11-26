@@ -48,15 +48,27 @@ def identified_range(nominal, interval, label):
     return [lower, upper]
 
 
+def identification_asset(data):
+    path = ROBOT_CONTRACT['urdf_relative_path']
+    digest = ROBOT_CONTRACT['urdf_sha256']
+    if 'urdf_relative_path' in data:
+        from humanoid.f1_owner_baseline import validate_owner_baseline
+        asset = validate_owner_baseline()
+        path, digest = asset['urdf_relative_path'], asset['urdf_sha256']
+        if data['urdf_relative_path'] != path:
+            raise ValueError('Identification must use the approved 005 URDF')
+    if data.get('urdf_sha256') != digest or sha256(TRAINING_ROOT / path) != digest:
+        raise ValueError('Identification must bind to this exact F1 URDF SHA256')
+    return (TRAINING_ROOT / path).resolve(), digest
+
+
 def validate_identification(payload=None):
     data = read_json(IDENTIFICATION_FILE) if payload is None else payload
     if data.get('status') != 'ready':
         raise ValueError('F1 parameter identification is pending; no training is permitted')
     if data.get('schema_version') != 1 or data.get('robot') != 'F1-12DOF':
         raise ValueError('F1 identification schema/robot mismatch')
-    urdf = TRAINING_ROOT / ROBOT_CONTRACT['urdf_relative_path']
-    if sha256(urdf) != ROBOT_CONTRACT['urdf_sha256'] or data.get('urdf_sha256') != ROBOT_CONTRACT['urdf_sha256']:
-        raise ValueError('Identification must bind to this exact F1 URDF SHA256')
+    identification_asset(data)
     sources = data.get('sources')
     if not isinstance(sources, list) or not sources:
         raise ValueError('Actual identification data source file/fields are required')
@@ -131,6 +143,10 @@ def apply_identification(cfg, data=None):
         from humanoid.f1_owner_baseline import apply_owner_baseline
         return apply_owner_baseline(cfg)
     identified = validate_identification(data)
+    if 'urdf_relative_path' in identified:
+        runtime_asset = Path(cfg.asset.file.format(LEGGED_GYM_ROOT_DIR=str(TRAINING_ROOT))).resolve()
+        if runtime_asset != (TRAINING_ROOT / identified['urdf_relative_path']).resolve() or cfg.asset.armature != 0:
+            raise ValueError('Expected the bound identification URDF and per-joint armature only')
     dr = cfg.domain_rand
     # Preserve the asset's passive dynamics; explicit friction is a separate identified layer.
     dr.randomize_joint_friction = False
@@ -166,7 +182,6 @@ def verify_checkpoint(path, required_task=None, required_iteration=None):
     path = Path(path).expanduser().resolve(strict=True)
     metadata = read_json(checkpoint_metadata_path(path))
     expected = {'schema_version': 1, 'robot': 'F1-12DOF',
-                'urdf_sha256': ROBOT_CONTRACT['urdf_sha256'],
                 'robot_contract_sha256': sha256(ROBOT_FILE),
                 'identification_sha256': sha256(IDENTIFICATION_FILE),
                 'checkpoint_sha256': sha256(path)}
@@ -177,6 +192,8 @@ def verify_checkpoint(path, required_task=None, required_iteration=None):
                         identification_sha256=None,
                         physical_model_sha256=sha256(MODEL_FILE),
                         training_profile_sha256=sha256(TRAINING_ROOT / model['profile_file']))
+    else:
+        expected['urdf_sha256'] = identification_asset(read_json(IDENTIFICATION_FILE))[1]
     for key, value in expected.items():
         if metadata.get(key) != value:
             raise ValueError(f'Checkpoint F1 provenance mismatch: {key}')
@@ -196,7 +213,6 @@ def write_checkpoint_metadata(path, task, iteration, parent=None, physical_model
         raise ValueError('Unknown F1 checkpoint task')
     metadata = {'schema_version': 1, 'robot': 'F1-12DOF', 'task': task,
                 'goal_revision': goal_revision, 'iteration': int(iteration),
-                'urdf_sha256': ROBOT_CONTRACT['urdf_sha256'],
                 'robot_contract_sha256': sha256(ROBOT_FILE),
                 'identification_sha256': sha256(IDENTIFICATION_FILE),
                 'checkpoint_sha256': sha256(path), 'parent': parent}
@@ -209,5 +225,7 @@ def write_checkpoint_metadata(path, task, iteration, parent=None, physical_model
                         identification_sha256=None, physical_model_kind='owner_baseline',
                         physical_model_sha256=sha256(MODEL_FILE),
                         training_profile_sha256=sha256(TRAINING_ROOT / model['profile_file']))
+    else:
+        metadata['urdf_sha256'] = identification_asset(read_json(IDENTIFICATION_FILE))[1]
     checkpoint_metadata_path(path).write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     return metadata
