@@ -1,4 +1,4 @@
-"""Continue F1 50 Hz stage one from the r20 lateral target checkpoint with late-swing direction supervision."""
+"""Continue F1 50 Hz stage one from the r21 swing-direction checkpoint with the owner-gated rearward pitch penalty."""
 
 import argparse
 from contextlib import ExitStack
@@ -14,9 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from humanoid.f1_contract import assert_training_admission, verify_checkpoint, write_checkpoint_metadata
 
 
-PARENT_TASK = 'TASK_20261123_017'
-PARENT_ITERATION = 4000
-PARENT_SHA256 = '563cda98ea48fae2ec35d5fd039ddd2da1e650144e0868d3d9350a6fe0527d22'
+PARENT_TASK = 'TASK_20261126_108'
+PARENT_ITERATION = 5000
+PARENT_SHA256 = 'dd8e6bd46adf11b206dc8928bbdddfc8f4d012fce026a33a27859947ed636bcf'
 # The size and hash bind the r20 lateral target model_4000 checkpoint.
 PARENT_SIZE = 10_324_999
 
@@ -58,12 +58,12 @@ def main():
     if physical.get('kind') != 'owner_baseline' or physical['delivery']['enabled']:
         raise ValueError('Requires the owner no-filter simulation baseline')
     if resume.parent_iteration != PARENT_ITERATION:
-        raise ValueError('This continuation requires the registered r20 model_4000 checkpoint')
+        raise ValueError('This continuation requires the registered r21 model_5000 checkpoint')
     with ExitStack() as resources:
         parent_path = resume.parent_checkpoint
         if resume.parent_download_url:
             download_dir = Path(resources.enter_context(TemporaryDirectory(prefix='f1-parent-')))
-            parent_path = download_parent(resume.parent_download_url, download_dir / 'model_4000.pt',
+            parent_path = download_parent(resume.parent_download_url, download_dir / 'model_5000.pt',
                                           physical)
         parent, metadata = verify_checkpoint(parent_path, required_task='f1_walk_stage1',
                                              required_iteration=PARENT_ITERATION)
@@ -77,8 +77,8 @@ def train(log_root, parent, metadata):
     from humanoid.algo.ppo.actor_critic_f1_equivariant import register_policy_class
     from humanoid.envs import task_registry
     from humanoid.envs.f1.f1_equivariant_config import F1EquivariantCfgPPO
-    from humanoid.envs.f1.f1_lateral_swing_direction_50hz import (
-        F1LateralSwingDirection50HzCfg, F1LateralSwingDirection50HzEnv)
+    from humanoid.envs.f1.f1_rearward_pitch_gate import (
+        F1RearwardPitchGateCfg, F1RearwardPitchGateEnv)
     from humanoid.utils import get_args
 
     args = get_args()
@@ -87,8 +87,8 @@ def train(log_root, parent, metadata):
     if args.max_iterations is None or args.max_iterations <= 0:
         raise ValueError('Specify a positive number of additional updates')
     register_policy_class()
-    task_registry.register(args.task, F1LateralSwingDirection50HzEnv,
-                           F1LateralSwingDirection50HzCfg(), F1EquivariantCfgPPO())
+    task_registry.register(args.task, F1RearwardPitchGateEnv,
+                           F1RearwardPitchGateCfg(), F1EquivariantCfgPPO())
     env, cfg = task_registry.make_env(name=args.task, args=args)
     if cfg.domain_rand.enable_delivery or cfg.sim.dt * cfg.control.decimation != 1 / 50:
         raise ValueError('Effective controls differ from the 50 Hz no-filter baseline')
@@ -105,6 +105,8 @@ def train(log_root, parent, metadata):
     print('[F1 command] ' + cfg.env.command_semantics, flush=True)
     print('[F1 reward] ' + cfg.env.reward_semantics, flush=True)
     print('[F1 policy] ' + train_cfg.runner.policy_class_name, flush=True)
+    print('[F1 pitch gate] rearward_pitch_penalty=' + str(cfg.rewards.rearward_pitch_penalty) +
+          ' wz_threshold=' + str(cfg.rewards.rearward_pitch_wz_threshold), flush=True)
     print(f'[F1 parent] {PARENT_TASK} {metadata["checkpoint_sha256"]} at {PARENT_ITERATION}, fresh optimizer',
           flush=True)
     runner.learn(num_learning_iterations=train_cfg.runner.max_iterations, init_at_random_ep_len=False)
