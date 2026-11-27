@@ -8,6 +8,9 @@ delay ranges up to the identified envelope:
   s3 action [5, 30] ms feedback [0, 30] ms
   s4 action [5, 40] ms feedback [0, 40] ms
 Model and optimizer state carry across segments (learn() is called per segment).
+Pass --resume-checkpoint to continue an interrupted run from an own model_N.pt:
+the model and both optimizer states are restored and the schedule resumes at the
+segment that covers the saved iteration.
 """
 import argparse
 import hashlib
@@ -92,11 +95,10 @@ def main():
                         help='verification only: updates per segment instead of 1500')
     parser.add_argument('--smoke-envs', type=int, default=0,
                         help='verification only: smaller num_envs override')
+    parser.add_argument('--resume-checkpoint', default=None,
+                        help='continue from an own identified model_N.pt (+ .f1.json) with model and optimizer state')
     options, native_args = parser.parse_known_args()
     sys.argv = [sys.argv[0]] + native_args
-
-    record = json.loads(PARENT_FILE.read_text(encoding='utf-8'))
-    parent_path, parent_meta = verify_parent(options.parent_checkpoint, record)
 
     physical = assert_training_admission()
     if physical.get('profile') != 'stage1_100hz_identified':
@@ -105,6 +107,7 @@ def main():
     import isaacgym  # noqa: F401
     import torch
     from humanoid.envs.f1.f1_identified_100hz import POLICY_DT, register_identified_task
+    from humanoid.f1_contract import verify_checkpoint
     from humanoid.utils import get_args
 
     args = get_args()
@@ -127,25 +130,45 @@ def main():
         raise ValueError('Effective timing or actuator dynamics differ from the identified profile')
 
     runner, train_cfg, _ = registry.make_alg_runner(env=env, name=args.task, args=args)
-    saved = torch.load(str(parent_path), map_location='cpu')
-    if saved.get('iter') != record['iteration']:
-        raise ValueError('Parent tensor iteration differs from the registered r11 model')
-    policy = runner.alg.actor_critic
-    policy.load_state_dict(saved['model_state_dict'], strict=True)
-    learning_rate = runner.alg.optimizer.param_groups[0]['lr']
-    runner.alg.optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
-    runner.alg.state_estimator_optimizer = torch.optim.Adam(
-        policy.state_estimator.parameters(), lr=learning_rate)
-    runner.current_learning_iteration = 0
-    runner.it = 0
-    runner.parent_checkpoint = {'path': str(parent_path), 'sha256': record['sha256'],
-                                'task': record['task'], 'iteration': record['iteration']}
-    print(f'[F1 warmstart] parent verified sha256={record["sha256"]} '
-          f'task={record["source_task_id"]} iteration={record["iteration"]}', flush=True)
+    if options.resume_checkpoint:
+        resume_path = Path(options.resume_checkpoint).expanduser().resolve(strict=True)
+        resume_path, resume_meta = verify_checkpoint(resume_path, required_task=train['task'])
+        runner.load(str(resume_path), load_optimizer=True)
+        start_iteration = runner.current_learning_iteration
+        completed_segments, within = divmod(start_iteration, SEGMENT_ITERATIONS)
+        if completed_segments >= len(SEGMENTS):
+            print(f'[F1 resume] checkpoint iteration {start_iteration} already covers all segments', flush=True)
+            return
+        runner.parent_checkpoint = {'path': str(resume_path), 'sha256': resume_meta['checkpoint_sha256'],
+                                    'task': resume_meta['task'], 'iteration': resume_meta['iteration']}
+        print(f'[F1 resume] checkpoint verified iteration={start_iteration} '
+              f'segment=s{completed_segments + 1} within={within} sha256={resume_meta["checkpoint_sha256"]}',
+              flush=True)
+        schedule = [(s, SEGMENT_ITERATIONS - within if i == completed_segments else SEGMENT_ITERATIONS)
+                    for i, s in enumerate(SEGMENTS) if i >= completed_segments]
+    else:
+        record = json.loads(PARENT_FILE.read_text(encoding='utf-8'))
+        parent_path, parent_meta = verify_parent(options.parent_checkpoint, record)
+        saved = torch.load(str(parent_path), map_location='cpu')
+        if saved.get('iter') != record['iteration']:
+            raise ValueError('Parent tensor iteration differs from the registered r11 model')
+        policy = runner.alg.actor_critic
+        policy.load_state_dict(saved['model_state_dict'], strict=True)
+        learning_rate = runner.alg.optimizer.param_groups[0]['lr']
+        runner.alg.optimizer = torch.optim.Adam(policy.parameters(), lr=learning_rate)
+        runner.alg.state_estimator_optimizer = torch.optim.Adam(
+            policy.state_estimator.parameters(), lr=learning_rate)
+        runner.current_learning_iteration = 0
+        runner.it = 0
+        runner.parent_checkpoint = {'path': str(parent_path), 'sha256': record['sha256'],
+                                    'task': record['task'], 'iteration': record['iteration']}
+        print(f'[F1 warmstart] parent verified sha256={record["sha256"]} '
+              f'task={record["source_task_id"]} iteration={record["iteration"]}', flush=True)
+        schedule = [(s, SEGMENT_ITERATIONS) for s in SEGMENTS]
 
-    for segment in SEGMENTS:
+    for segment, iterations in schedule:
+        iterations = options.smoke_iterations or iterations
         set_delay_ranges(env, segment['action_ms'], segment['feedback_ms'])
-        iterations = options.smoke_iterations or SEGMENT_ITERATIONS
         print(f'[F1 warmstart] {segment["name"]} action={segment["action_ms"]} ms '
               f'feedback={segment["feedback_ms"]} ms iterations={iterations}', flush=True)
         runner.learn(num_learning_iterations=iterations, init_at_random_ep_len=False)
