@@ -1,4 +1,4 @@
-"""Continue F1 50 Hz stage one from the r20 lateral target checkpoint with late-swing direction supervision."""
+"""r25 posture-first: continue F1 50 Hz stage one from TASK054 model_1000 (upright, -1.92 deg) with the r21 late-swing direction recipe (w60), single variable = parent timing."""
 
 import argparse
 from contextlib import ExitStack
@@ -14,10 +14,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from humanoid.f1_contract import assert_training_admission, verify_checkpoint, write_checkpoint_metadata
 
 
-PARENT_TASK = 'TASK_20261123_017'
-PARENT_ITERATION = 4000
-PARENT_SHA256 = '563cda98ea48fae2ec35d5fd039ddd2da1e650144e0868d3d9350a6fe0527d22'
-# The size and hash bind the r20 lateral target model_4000 checkpoint.
+PARENT_TASK = 'TASK_20261121_054'
+PARENT_ITERATION = 1000
+PARENT_SHA256 = '9da6579f0f0c105894d2ba667d7684f15328ca39203b2bd0f9a0458aa952f4a6'
+# The size and hash bind the TASK054 model_1000 checkpoint (upright posture-first base).
 PARENT_SIZE = 10_324_999
 
 
@@ -58,17 +58,17 @@ def main():
     if physical.get('kind') != 'owner_baseline' or physical['delivery']['enabled']:
         raise ValueError('Requires the owner no-filter simulation baseline')
     if resume.parent_iteration != PARENT_ITERATION:
-        raise ValueError('This continuation requires the registered r20 model_4000 checkpoint')
+        raise ValueError('This continuation requires the registered TASK054 model_1000 checkpoint')
     with ExitStack() as resources:
         parent_path = resume.parent_checkpoint
         if resume.parent_download_url:
             download_dir = Path(resources.enter_context(TemporaryDirectory(prefix='f1-parent-')))
-            parent_path = download_parent(resume.parent_download_url, download_dir / 'model_4000.pt',
+            parent_path = download_parent(resume.parent_download_url, download_dir / 'model_1000.pt',
                                           physical)
         parent, metadata = verify_checkpoint(parent_path, required_task='f1_walk_stage1',
                                              required_iteration=PARENT_ITERATION)
         if metadata['checkpoint_sha256'] != PARENT_SHA256:
-            raise ValueError('Local checkpoint differs from the registered r20 parent')
+            raise ValueError('Local checkpoint differs from the registered TASK054 parent')
         train(resume.log_root, parent, metadata)
 
 
