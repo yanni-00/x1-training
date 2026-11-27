@@ -68,12 +68,26 @@ def set_delay_ranges(env, action_ms, feedback_ms):
     env.lag_timestep = torch.randint(int(action_ms[0]), int(action_ms[1]) + 1, (n,), device=env.device)
     env.dof_lag_buffer = torch.zeros(n, env.num_actions * 2, int(feedback_ms[1]) + 1, device=env.device)
     env.dof_lag_timestep = torch.randint(int(feedback_ms[0]), int(feedback_ms[1]) + 1, (n,), device=env.device)
+    # A zeroed feedback buffer makes the policy read fictitious joint positions until
+    # the history fills (measured to roughly halve start-up survival). Fill the new
+    # buffer with the real current q/dq so the first inference of the segment sees
+    # valid observations.
+    with torch.no_grad():
+        current = torch.cat((env.dof_pos, env.dof_vel), dim=1).unsqueeze(-1)
+        env.dof_lag_buffer[:] = current.repeat(1, 1, env.dof_lag_buffer.shape[-1])
+        env.compute_observations()
+        gap = (env.lagged_dof_pos - env.dof_pos).abs().max().item()
+    print(f'[F1 warmstart] feedback buffer filled from current state, '
+          f'max|lagged_dof_pos - dof_pos| = {gap:.3e}', flush=True)
+    if gap > 1e-4:
+        raise ValueError('Segment feedback buffer does not match the current joint state')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--parent-checkpoint', required=True,
-                        help='r11 model_6000.pt with its .f1.json sidecar')
+    parser.add_argument('--parent-checkpoint', default=str(TRAINING_ROOT / 'assets/warm_start/model_6000.pt'),
+                        help='r11 model_6000.pt with its .f1.json sidecar '
+                             '(defaults to the bundled assets/warm_start copy)')
     parser.add_argument('--smoke-iterations', type=int, default=0,
                         help='verification only: updates per segment instead of 1500')
     parser.add_argument('--smoke-envs', type=int, default=0,
