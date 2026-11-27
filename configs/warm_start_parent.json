@@ -1,0 +1,21 @@
+{
+  "kind": "r11_parent_checkpoint",
+  "task": "f1_walk_stage1",
+  "iteration": 6000,
+  "source_task_id": "TASK_20261125_569",
+  "source_commit": "99856cfd6ea667da875c32222b1d653c8cc61ea8",
+  "sha256": "f0303537ac6a5cf7d48e8e19a3f8a36870b51954cbad9f5a53216e131e58c004",
+  "sidecar": {
+    "schema_version": 2,
+    "robot": "F1-12DOF",
+    "task": "f1_walk_stage1",
+    "iteration": 6000,
+    "identification_sha256": null,
+    "physical_model_kind": "owner_baseline",
+    "urdf_sha256": "70e728a94f63032d9355afcf6fb473640e1235e1122417ffa71a9c066019c710",
+    "robot_contract_sha256": "da6bff92888ffc763add98069d3cd8b121eff486ac2d22927a4453cec6c4444e",
+    "source_task_id": "TASK_20261125_569",
+    "source_commit": "99856cfd6ea667da875c32222b1d653c8cc61ea8"
+  },
+  "note": "Owner-baseline r11 checkpoint (weight-60 swing direction, TASK_20261125_569) used only as warm-start weights; the identified profile and its delays are applied by the new training entry."
+}
